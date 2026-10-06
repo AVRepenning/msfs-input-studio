@@ -1,5 +1,12 @@
 Portable Windows controller-profile editor for use with MSFS 2024 closed.
 
+v0.2.1 fixes:
+
+- Fixed the Saved-browser freeze caused by repeatedly rebuilding each profile's action map while counting bindings. Counting 30 local profiles dropped from about 40 seconds to 0.17 seconds with identical results.
+- Saved now opens immediately, scans in the background, shows loading progress and provides Refresh/retry feedback. Existing results remain usable after a scan failure. Closing the app cancels the scan.
+- Flaps and other aircraft controls now explain why a General profile cannot bind them and offer a matching profile. Empty profiles can switch type while keeping their name, device identity and axis tuning; Undo/Redo restores the change. Profiles with existing controls use a separate New profile dialog.
+- The profile-type dropdown is available, disabled recording buttons have a clear disabled appearance, and conflict detection avoids repeated action-map rebuilding when opening large profiles.
+
 - Prominent recording, countdown, detected-input, retry, stopped and saved feedback; an always-accessible Stop listening button.
 - Windows-style numbered button lights, XY position and every reported axis with numeric values and scales. A larger controller-test window supports naming inputs.
 - Independent airplane/helicopter/general browsing, English names for 1,652 catalogue entries, groups, bound/unbound filters and guided setup.
@@ -9,7 +16,7 @@ Portable Windows controller-profile editor for use with MSFS 2024 closed.
 - Local automatic working copies, compressed named undo history, batch editing and device/aircraft metadata editing.
 - Device Keys reference browser, DeviceConfig/ActionDB/remapDB source editors and SDK DefaultInput export. Imported numbered axes remain editable.
 
-Validation: 38 automated tests, semantic round trips across 48 public profile exports, 20 controller/UI workflow checks and 7 keyboard/mouse workflow checks. Input streams are simulated; the connected PowerA FlightDeck reports 7 axes and 27 buttons. Native readers and the packaged executable are checked on Windows.
+Validation: 45 automated tests, semantic round trips across 48 public profile exports, 20 controller/UI workflow checks, 7 keyboard/mouse workflow checks and 14 Saved/flaps regression checks. The Saved browser was tested against 30 real local profiles, including opening the largest as a copy. Input streams are simulated; the connected PowerA FlightDeck reports 7 axes and 27 buttons. Native readers and the packaged executable are checked on Windows.
 
 This is a test build. XRAY hardware, generated-profile import and in-flight behavior still need simulator validation. Exhaustive current action coverage, VR/proprietary devices, SDK image/layout authoring and package deployment remain incomplete; see FEATURE_MATRIX.md.
 

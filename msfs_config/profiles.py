@@ -89,6 +89,25 @@ class Profile:
         return {(ctx.get('ContextName'), action.get('ActionName')): action
                 for ctx in self.device.findall('Context') for action in ctx.findall('Action')}
 
+    def bound_slot_count(self):
+        return sum(bool(action.findall(f'{slot}/KEY'))
+                   for action in self.actions().values() for slot in ('Primary', 'Secondary'))
+
+    def can_change_category(self):
+        info = self.device.find('AircraftInfo')
+        return (self.format == 'native' and not self.actions() and
+                (info is None or (set(info.attrib) <= {'CategoryName'} and not len(info)
+                                  and not (info.text or '').strip())))
+
+    def change_empty_category(self, category):
+        if category not in ('GENERAL', 'AIRPLANE', 'HELICOPTER') or not self.can_change_category():
+            raise ValueError('Create a separate profile to change the type of an existing aircraft or control profile.')
+        info = self.device.find('AircraftInfo')
+        if info is not None:
+            self.device.remove(info)
+        if category != 'GENERAL':
+            self.device.insert(0, ET.Element('AircraftInfo', CategoryName=category))
+
     def action(self, context, name, create=False, defaults=None):
         found = self.actions().get((context, name))
         if found is not None or not create:

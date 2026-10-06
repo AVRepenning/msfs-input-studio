@@ -5,9 +5,9 @@ Create and edit profiles with the simulator closed, then import the exported XML
 through MSFS Controls. No Python, SDK, account or network connection is needed
 to run the executable.
 
-[Download v0.2.0](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.0).
+[Download v0.2.1](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.1).
 This repository and its downloads are private. The updated local executable is
-`dist/v0.2.0/MSFSInputStudio.exe`; an earlier open executable can remain running.
+`dist/v0.2.1/MSFSInputStudio.exe`; an earlier open executable can remain running.
 
 **Status: test build, with simulator and XRAY validation still outstanding.**
 Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
@@ -21,6 +21,11 @@ Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
 2. Click **New** and choose General, Airplane or Helicopter. **Saved** opens a
    copy of an existing local Store preset; **Open XML** opens a simulator export.
    Each profile type is a separate simulator preset.
+   Saved profiles load in the background with progress and retry feedback.
+   If a control belongs to another type, the editor explains why it is disabled
+   and offers a matching profile. An empty profile can change type while keeping
+   its name, controller and axis settings; existing controls use a separate
+   **New** profile dialog. The profile-type dropdown offers the same workflow.
 3. **Show** changes which controls you browse without changing the profile.
    Search names, event IDs, contexts and assigned input labels; filter by group,
    context, bound/unbound or possible conflicts. Column headings sort the list.
@@ -128,7 +133,7 @@ Controls-menu imports.
 ## Build and verify
 
 Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` installs pinned tools,
-runs tests, builds a windowed one-file executable into `dist/v0.2.0` and creates
+runs tests, builds a windowed one-file executable into `dist/v0.2.1` and creates
 a source archive there. Intermediate files go to LocalAppData to avoid OneDrive
 locks. The source archive includes the public fixtures; a fresh Git checkout
 needs these retrieved separately:
@@ -146,12 +151,16 @@ Private Store profiles and working copies are not packaged.
 
 Validation:
 
-- 38 automated tests, including semantic round trips across all 48 public
+- 45 automated tests, including semantic round trips across all 48 public
   fixtures, per-family identity/conflicts, numbered axes, SDK data, XInput
   translation, read-only scans and working-copy preservation.
 - 20 actual Tk controller/UI workflow checks and seven keyboard/mouse checks,
   with simulated press/motion streams. Slow chords, held switches, retry, Escape,
   navigation, labels, batch undo, working-copy recovery and export are exercised.
+- 14 Saved/flaps workflow checks cover background loading, failure/retry,
+  close/reopen/cancellation, cached counts, large-profile opening, profile-type
+  guidance, preservation and Undo/Redo. A simulated flaps-axis recording is
+  verified against the connected controller's real Windows inputs.
 - Windows enumerates the connected PowerA FlightDeck's seven axes and 27 buttons.
   Keyboard/mouse readers initialize. Physical manipulation and a connected
   native XInput device have not been tested.
@@ -162,11 +171,13 @@ Validation:
 
 `tools/qa_ui.py` and `tools/qa_workflow.py` use Pillow for development screenshots.
 `tools/qa_system_workflow.py` needs local keyboard/mouse reference profiles.
+`tools/qa_saved_workflow.py` reproduces Saved and flaps setup, using Pillow
+and the connected controller; it also reads local Store profiles when present.
 Pillow is not needed to build or run the app.
 
 ```powershell
-dist/v0.2.0/MSFSInputStudio.exe --smoke-test app-smoke.json
-dist/v0.2.0/MSFSInputStudio.exe --diagnose controller-diagnostics.json
+dist/v0.2.1/MSFSInputStudio.exe --smoke-test app-smoke.json
+dist/v0.2.1/MSFSInputStudio.exe --diagnose controller-diagnostics.json
 ```
 
 Next acceptance: connect XRAY, check its live inputs, export one verified axis

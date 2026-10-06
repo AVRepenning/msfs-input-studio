@@ -3,8 +3,10 @@ import ctypes
 import json
 import math
 import os
+import queue
 from pathlib import Path
 import time
+import threading
 import uuid
 import zlib
 import tkinter as tk
@@ -74,6 +76,13 @@ class App:
         self.input_filter_names = None
         self.sdk_editors = []
         self.saved_profiles = []
+        self.profile_scan_running = False
+        self.profile_scan_loaded = False
+        self.profile_scan_results = queue.Queue()
+        self.profile_scan_cancel = threading.Event()
+        self.profile_scan_progress = tk.StringVar(value='Saved profiles have not been scanned yet.')
+        self.saved_browser_window = None
+        self.saved_browser_refresh = None
         self.user_library = user_library
         self.drafts = DraftStore(storage=user_library)
         self.draft_session = str(uuid.uuid4())
@@ -136,7 +145,8 @@ class App:
         style.configure('.', font=('Segoe UI', 10), background='#edf1f5', foreground='#243247')
         style.configure('TButton', padding=(10, 7))
         style.configure('Accent.TButton', background='#195cf2', foreground='white')
-        style.map('Accent.TButton', background=[('active', '#1549c0')])
+        style.map('Accent.TButton', background=[('disabled', '#e0e5ec'), ('active', '#1549c0')],
+                  foreground=[('disabled', '#7b8796')])
         style.configure('Title.TLabel', font=('Segoe UI Semibold', 24))
         style.configure('Heading.TLabel', font=('Segoe UI Semibold', 12))
         style.configure('Muted.TLabel', foreground='#59677b')
@@ -175,8 +185,9 @@ class App:
         self.name_entry = ttk.Entry(toolbar, textvariable=self.name_var, width=25)
         self.name_entry.pack(side='left')
         self.name_entry.bind('<FocusOut>', lambda _: setattr(self, 'renaming', False))
-        self.category_combo = ttk.Combobox(toolbar, textvariable=self.type_var, values=list(CATEGORIES), state='disabled', width=20)
+        self.category_combo = ttk.Combobox(toolbar, textvariable=self.type_var, values=list(CATEGORIES), state='readonly', width=20)
         self.category_combo.pack(side='left', padx=8)
+        self.category_combo.bind('<<ComboboxSelected>>', self.category_changed)
         for label, command in [('New', self.new_profile_dialog), ('Open XML', self.open_profile),
                                ('Duplicate', self.duplicate), ('Undo', self.undo), ('Redo', self.redo)]:
             ttk.Button(toolbar, text=label, command=command).pack(side='left', padx=2)
@@ -265,6 +276,11 @@ class App:
         self.action_title.pack(anchor='w')
         self.action_id = ttk.Label(right, text='Search by name, event ID or context.', style='Muted.TLabel', wraplength=440)
         self.action_id.pack(anchor='w', pady=(5, 12))
+        self.profile_hint = ttk.Frame(right, padding=(0, 0, 0, 10))
+        self.profile_hint_text = ttk.Label(self.profile_hint, wraplength=430, foreground='#9c3e09')
+        self.profile_hint_text.pack(fill='x')
+        self.profile_hint_button = ttk.Button(self.profile_hint, command=self.use_selected_profile_type)
+        self.profile_hint_button.pack(anchor='w', pady=(6, 0))
         tabs = self.tabs = ttk.Notebook(right)
         tabs.pack(fill='both', expand=True)
         pages = [ScrollPage(tabs) for _ in range(3)]
@@ -739,7 +755,7 @@ class App:
         except (OSError, ValueError) as exc:
             self.error(exc)
 
-    def new_profile_dialog(self):
+    def new_profile_dialog(self, preferred_category=None):
         window = tk.Toplevel(self.root)
         window.title('Create a profile')
         window.transient(self.root)
@@ -749,7 +765,8 @@ class App:
         ttk.Label(frame, text='Choose what you want to configure', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(frame, text='General, airplane and helicopter controls are separate simulator profiles. Your current profile is kept until you create the new one.', wraplength=450).pack(anchor='w', pady=10)
         name = tk.StringVar(value='My flight controls')
-        category = tk.StringVar(value=self.type_var.get() if self.type_var.get() in CATEGORIES else 'General controls')
+        category = tk.StringVar(value=next((label for label, value in CATEGORIES.items() if value == preferred_category),
+                                          self.type_var.get() if self.type_var.get() in CATEGORIES else 'General controls'))
         ttk.Label(frame, text='Profile name').pack(anchor='w')
         entry = ttk.Entry(frame, textvariable=name)
         entry.pack(fill='x', pady=(4, 10))
@@ -835,7 +852,7 @@ class App:
         self.type_var.set(next((label for label, value in CATEGORIES.items() if value == self.profile.category), self.profile.category + ' controls'))
         self.current_profile_category = self.profile.category
         self.loading = False
-        self.category_combo.configure(state='disabled')
+        self.category_combo.configure(state='readonly')
         self.refresh_list()
         self.show_action()
         self.load_axis()
@@ -849,14 +866,33 @@ class App:
             self.profile.name = self.name_var.get()
 
     def category_changed(self, _=None):
-        self.status.set('This chooses the type for your next New profile. Use Show to browse control types in the current profile.')
+        chosen = CATEGORIES.get(self.type_var.get())
+        if self.profile:
+            self.type_var.set(next((label for label, value in CATEGORIES.items() if value == self.profile.category),
+                                   self.profile.category + ' controls'))
+        if chosen and (not self.profile or chosen != self.profile.category):
+            self.use_profile_type(chosen)
 
-    def new_profile_for_category(self, chosen):
-        if not self.selected_device():
-            self.error('Connect a controller to create a new profile type. Open an existing export for offline editing.')
-            return False
-        self.new_profile()
-        return self.profile.category == CATEGORIES[chosen]
+    def use_profile_type(self, chosen):
+        if self.profile and self.profile.can_change_category():
+            self.cancel_capture()
+            self.checkpoint('Change profile type')
+            self.profile.change_empty_category(chosen)
+            self.sync_profile()
+            label = next(label for label, value in CATEGORIES.items() if value == chosen)
+            self.feedback('PROFILE TYPE UPDATED · NOT RECORDING',
+                          f'{label}. Your profile name, controller and axis settings are kept. Select a control and click Get Input.', 'success')
+        else:
+            self.new_profile_dialog(chosen)
+
+    def selected_profile_type(self):
+        categories = self.catalogue.actions[self.selected]['categories'] if self.selected else []
+        return next((value for value in CATEGORIES.values() if value in categories), None)
+
+    def use_selected_profile_type(self):
+        chosen = self.selected_profile_type()
+        if chosen:
+            self.use_profile_type(chosen)
 
     def duplicate(self):
         if not self.profile:
@@ -1094,6 +1130,23 @@ class App:
     def update_binding_buttons(self):
         allowed = bool(self.profile and self.selected and (self.profile.category in self.catalogue.actions[self.selected]['categories'] or self.profile.action(*self.selected) is not None))
         matching_device = self.controller_matches()
+        self.profile_hint.pack_forget()
+        if self.selected and not allowed:
+            chosen = self.selected_profile_type()
+            if chosen:
+                label = next(label for label, value in CATEGORIES.items() if value == chosen)
+                current = self.type_var.get() if self.profile else 'No profile'
+                available = ' or '.join(label.replace(' controls', '') for label, value in CATEGORIES.items()
+                                        if value in self.catalogue.actions[self.selected]['categories'])
+                self.profile_hint_text.configure(text=f'{current} cannot bind this control. This control uses {available} profiles.')
+                blank = self.profile and self.profile.can_change_category()
+                self.profile_hint_button.configure(text=('Use ' if blank else 'New ') + label.replace(' controls', '') + ' profile')
+                self.profile_hint_button.pack(anchor='w', pady=(6, 0))
+                self.profile_hint.pack(before=self.tabs, fill='x')
+        elif allowed and not matching_device:
+            self.profile_hint_text.configure(text='Recording is unavailable because the selected controller does not match this profile. Select its controller, or click Use for this profile. Verified inputs can also be chosen below.')
+            self.profile_hint_button.pack_forget()
+            self.profile_hint.pack(before=self.tabs, fill='x')
         for slot, label, button in self.binding_buttons:
             enabled = allowed and (label != 'Get Input' or matching_device) and (label != 'Clear' or bool(self.slot_keys[slot]))
             button.configure(state='normal' if enabled else 'disabled')
@@ -1294,24 +1347,100 @@ class App:
             menu.grab_release()
 
     def scan_saved_profiles(self, quiet=False):
+        if self.profile_scan_running:
+            return
+        self.profile_scan_running = True
+        self.profile_scan_progress.set('Loading saved profiles… You can keep using the editor or close this browser.')
+        self.profile_scan_cancel = threading.Event()
         from .local_profiles import scan_profiles
-        self.saved_profiles = scan_profiles()
-        before = len(self.catalogue.key_pairs)
-        for row in self.saved_profiles:
-            self.catalogue.learn(row['profile'])
-        self.catalogue.save_library()
-        self.context_combo.configure(values=['All contexts'] + sorted({a[0] for a in self.catalogue.actions}))
-        self.update_input_choices()
-        self.refresh_list()
-        if not self.capture and not self.recording and not self.follow_input.get():
-            self.refresh_devices()
-        if not quiet:
-            self.feedback('SAVED PROFILES FOUND · NOT RECORDING', f'Found {len(self.saved_profiles)} local MSFS profiles and learned {len(self.catalogue.key_pairs) - before} additional input references. Open a copy to edit offline.', 'success')
+        def work():
+            try:
+                self.profile_scan_results.put((scan_profiles(cancel_event=self.profile_scan_cancel), None))
+            except Exception as exc:
+                self.profile_scan_results.put((None, str(exc)))
+        threading.Thread(target=work, name='MSFS profile scan', daemon=True).start()
+        self.root.after(50, lambda: self.poll_profile_scan(quiet))
+
+    def refresh_saved_browser(self):
+        if self.saved_browser_window is not None and self.saved_browser_window.winfo_exists() and self.saved_browser_refresh:
+            self.saved_browser_refresh()
+
+    def poll_profile_scan(self, quiet):
+        try:
+            rows, error = self.profile_scan_results.get_nowait()
+        except queue.Empty:
+            self.root.after(50, lambda: self.poll_profile_scan(quiet))
+            return
+        if error:
+            self.profile_scan_running = False
+            self.profile_scan_progress.set('Could not load saved profiles: ' + error + '. Try Refresh, or use Open XML.')
+            self.refresh_saved_browser()
+            return
+        self.saved_profiles = rows
+        self.profile_scan_loaded = True
+        self.profile_scan_progress.set(f'{len(rows)} profiles found. Loading their control references…')
+        self.refresh_saved_browser()
+        self.merge_saved_references(rows, 0, len(self.catalogue.key_pairs), quiet)
+
+    def merge_saved_references(self, rows, index, before, quiet):
+        started = time.perf_counter()
+        try:
+            while index < len(rows) and time.perf_counter() - started < .02:
+                self.catalogue.learn(rows[index]['profile'])
+                index += 1
+        except Exception as exc:
+            self.profile_scan_running = False
+            self.profile_scan_progress.set(f'Profiles loaded; could not learn their references: {exc}. Try Refresh or Open XML.')
+            self.refresh_saved_browser()
+            return
+        if index < len(rows):
+            self.profile_scan_progress.set(f'{len(rows)} profiles found. Loading control references… {index}/{len(rows)}')
+            self.root.after(10, lambda: self.merge_saved_references(rows, index, before, quiet))
+            return
+        try:
+            self.catalogue.save_library()
+            self.context_combo.configure(values=['All contexts'] + sorted({a[0] for a in self.catalogue.actions}))
+            self.update_input_choices()
+            self.refresh_list()
+            self.add_saved_system_devices()
+            self.profile_scan_progress.set(f'{len(rows)} profiles found. Open a copy to edit it offline.' if rows else
+                                           'No local Store profile XML was found. Use Open XML with a profile exported by MSFS.')
+            if not quiet and not (self.capture or self.recording or self.follow_input.get()):
+                self.feedback('SAVED PROFILES FOUND · NOT RECORDING', f'Found {len(rows)} local MSFS profiles and learned {len(self.catalogue.key_pairs) - before} additional input references.', 'success')
+        except Exception as exc:
+            self.profile_scan_progress.set(f'Profiles loaded; could not finish learning their references: {exc}. You can still open a copy.')
+        finally:
+            self.profile_scan_running = False
+            self.refresh_saved_browser()
+
+    def add_saved_system_devices(self):
+        # Discover built-in devices without closing/reopening the active reader.
+        previous = self.selected_device()
+        fresh = system_devices([row['profile'] for row in self.saved_profiles], self.catalogue)
+        if isinstance(previous, SystemDevice):
+            for index, device in enumerate(fresh):
+                if device.family == previous.family and device.slot == previous.slot:
+                    fresh[index] = previous
+        self.devices = [device for device in self.devices if not isinstance(device, SystemDevice)] + fresh
+        self.device_combo.configure(values=[device.name if isinstance(device, SystemDevice) else f'{device.name}  [{device.instance_guid[1:9]}]' for device in self.devices])
+        if previous in self.devices:
+            self.device_combo.current(self.devices.index(previous))
+        elif not self.controller and self.devices:
+            self.device_combo.current(0)
+            self.select_device()
+        if self.controller:
+            family = device_family(self.controller.device.attributes)
+            for obj in self.controller.objects:
+                pair = self.catalogue.resolve(obj.msfs_name('Up') if obj.kind == 'pov' else obj.msfs_name(), family)
+                self.monitor.set(str(obj.offset), 'support', str(pair[1]) if pair else 'Needs reference')
 
     def saved_profile_browser(self):
+        if self.saved_browser_window is not None and self.saved_browser_window.winfo_exists():
+            self.saved_browser_window.lift()
+            return self.saved_browser_window
         self.cancel_capture()
-        self.scan_saved_profiles(quiet=True)
         window = tk.Toplevel(self.root)
+        self.saved_browser_window = window
         window.title('Saved MSFS profiles · open a copy')
         window.geometry('870x570')
         window.transient(self.root)
@@ -1321,23 +1450,57 @@ class App:
         ttk.Label(frame, text='Start from your existing simulator profiles', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(frame, text='Open a copy, make changes, then Export XML and import it in MSFS. This browser reads local Store saves; it does not write to cloud storage.', wraplength=800).pack(anchor='w', pady=10)
         search = tk.StringVar()
-        ttk.Entry(frame, textvariable=search).pack(fill='x', pady=(0, 8))
-        listing = ttk.Treeview(frame, columns=('name', 'device', 'type', 'bindings'), show='headings', selectmode='browse')
+        search_row = ttk.Frame(frame)
+        search_row.pack(fill='x', pady=(0, 8))
+        ttk.Entry(search_row, textvariable=search).pack(side='left', fill='x', expand=True)
+        refresh_button = ttk.Button(search_row, text='Refresh', command=lambda: (self.scan_saved_profiles(quiet=True), refresh()))
+        refresh_button.pack(side='right', padx=(8, 0))
+        table = ttk.Frame(frame)
+        table.pack(fill='both', expand=True)
+        listing = ttk.Treeview(table, columns=('name', 'device', 'type', 'bindings'), show='headings', selectmode='browse')
         for key, title, width in [('name', 'Profile', 260), ('device', 'Device', 260), ('type', 'Type', 120), ('bindings', 'Bound', 70)]:
             listing.heading(key, text=title)
             listing.column(key, width=width)
-        listing.pack(fill='both', expand=True)
+        scroll = ttk.Scrollbar(table, orient='vertical', command=listing.yview)
+        listing.configure(yscrollcommand=scroll.set)
+        listing.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
+        displayed_rows = {}
         def refresh(*_):
+            selected = listing.selection()
+            previous_path = displayed_rows.get(selected[0], {}).get('path') if selected else None
             listing.delete(*listing.get_children())
+            displayed_rows.clear()
             for index, row in enumerate(self.saved_profiles):
                 if all(term in f'{row["name"]} {row["device"]} {row["category"]}'.casefold() for term in search.get().casefold().split()):
-                    bound = sum(bool(row['profile'].keys(*identity, slot)) for identity in row['profile'].actions() for slot in ('Primary', 'Secondary'))
+                    bound = row.get('bindings')
+                    if bound is None:
+                        bound = row['bindings'] = row['profile'].bound_slot_count()
+                    displayed_rows[str(index)] = row
                     listing.insert('', 'end', iid=str(index), values=(row['name'], row['device'], row['category'], bound))
+                    if row.get('path') == previous_path:
+                        listing.selection_set(str(index))
+            children = listing.get_children()
+            if children and not listing.selection():
+                listing.selection_set(children[0])
+            open_button.configure(state='normal' if children else 'disabled')
+            refresh_button.configure(state='disabled' if self.profile_scan_running else 'normal')
+            progress.stop()
+            if self.profile_scan_running:
+                progress.pack(fill='x', pady=(8, 0), before=progress_label)
+                progress.start(20)
+            else:
+                progress.pack_forget()
         def open_copy(*_):
             selected = listing.selection()
-            if not selected or not self.can_discard():
+            if not selected:
                 return
-            row = self.saved_profiles[int(selected[0])]
+            row = displayed_rows[selected[0]]
+            # An export prompt pumps Tk events; a scan can replace/reorder the list.
+            if not self.can_discard():
+                return
+            self.catalogue.learn(row['profile'])
+            self.catalogue.save_library()
             self.profile = Profile.from_text(row['profile'].to_text())
             self.draft_session, self.last_draft = str(uuid.uuid4()), None
             self.path = None
@@ -1352,9 +1515,16 @@ class App:
             window.destroy()
         search.trace_add('write', refresh)
         listing.bind('<Double-1>', open_copy)
+        progress = ttk.Progressbar(frame, mode='indeterminate')
+        progress_label = ttk.Label(frame, textvariable=self.profile_scan_progress, style='Muted.TLabel', wraplength=800)
+        progress_label.pack(anchor='w', pady=10)
+        open_button = ttk.Button(frame, text='Open selected copy', command=open_copy, style='Accent.TButton')
+        open_button.pack(fill='x')
+        self.saved_browser_refresh = refresh
+        if not self.profile_scan_loaded:
+            self.scan_saved_profiles(quiet=True)
         refresh()
-        ttk.Label(frame, text=f'{len(self.saved_profiles)} profiles found.' if self.saved_profiles else 'No local Store profile XML was found. You can use Open XML with a profile exported by MSFS.', style='Muted.TLabel', wraplength=800).pack(anchor='w', pady=10)
-        ttk.Button(frame, text='Open selected copy', command=open_copy, style='Accent.TButton').pack(fill='x')
+        return window
 
     def setup_walkthrough(self):
         window = tk.Toplevel(self.root)
@@ -1970,6 +2140,7 @@ class App:
                 return
         if not self.can_discard():
             return
+        self.profile_scan_cancel.set()
         if self.controller:
             self.controller.close()
         if self.backend:

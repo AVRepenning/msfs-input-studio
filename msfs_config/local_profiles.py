@@ -16,11 +16,13 @@ def is_managed_save(path, folders=None):
     return any(target.is_relative_to(Path(folder).resolve()) for folder in (profile_folders() if folders is None else folders))
 
 
-def scan_profiles(folders=None):
+def scan_profiles(folders=None, cancel_event=None):
     found = []
     seen = set()
     for folder in profile_folders() if folders is None else folders:
         for path in Path(folder).glob('*/*/*'):
+            if cancel_event is not None and cancel_event.is_set():
+                return found
             if not path.is_file() or path.name.startswith('container') or path in seen:
                 continue
             seen.add(path)
@@ -35,7 +37,8 @@ def scan_profiles(folders=None):
                     continue
                 profile = Profile.load(path)
                 found.append({'path': path, 'profile': profile, 'name': profile.name,
-                              'device': profile.device.get('DeviceName', ''), 'category': profile.category})
+                              'device': profile.device.get('DeviceName', ''), 'category': profile.category,
+                              'bindings': profile.bound_slot_count()})
             except (OSError, ValueError, ET.ParseError):
                 continue
     return sorted(found, key=lambda row: (row['device'].casefold(), row['category'], row['name'].casefold()))

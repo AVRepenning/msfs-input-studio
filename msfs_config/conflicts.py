@@ -4,9 +4,9 @@ from collections import defaultdict
 
 def binding_conflicts(profile):
     groups = defaultdict(list)
-    for identity in profile.actions():
+    for identity, action in profile.actions().items():
         for slot in ('Primary', 'Secondary'):
-            ids = frozenset(value.strip() for _, value in profile.keys(*identity, slot))
+            ids = frozenset((key.text or '').strip() for key in action.findall(f'{slot}/KEY'))
             if ids:
                 groups[identity[0]].append((identity, slot, ids))
     result = defaultdict(list)

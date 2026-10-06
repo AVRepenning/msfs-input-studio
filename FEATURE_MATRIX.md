@@ -4,11 +4,11 @@ The target is MSFS Controls settings and the SDK input editors, plus easier
 offline setup. Source editing is distinguished from simulator acceptance.
 This is not a claim of complete parity.
 
-| Feature | v0.2.0 | Remaining work / acceptance |
+| Feature | v0.2.1 | Remaining work / acceptance |
 | --- | --- | --- |
 | Windows discovery/live inputs | DirectInput, keyboard/mouse, XInput reader | XRAY, physical XInput, VR/proprietary devices |
 | Native profile read/export | 48 public round trips | Generated-file import and in-flight test |
-| General/Airplane/Helicopter | Explicit New, compatible bindings | Simulator aircraft/default assignment |
+| General/Airplane/Helicopter | Explicit New, mismatch guidance, safe blank type switch with Undo | Simulator aircraft/default assignment |
 | Browsing | Independent type, group, context, sort, bound/unbound | Complete current action database |
 | English names | 1,652 joined entries, event-name fallbacks | Remaining controls and localization tokens |
 | Individual/guided capture | Countdown, detection, saved/retry/timeout, pause/skip | Physical sessions |
@@ -25,7 +25,7 @@ This is not a claim of complete parity.
 | Undo and batch | Compressed named history, clear/behavior | Long user sessions |
 | Conflicts | Exact/subset chords within a context, advisory | Context/modifier precedence |
 | Metadata | Existing Device/FriendlyName/AircraftInfo/SDK fields | New aircraft IDs, composite detection |
-| Saved Store presets | Read-only scans/copy opening, reference learning | Other distribution save layouts |
+| Saved Store presets | Background read-only scans, progress/retry, cached counts, copy opening | Other distribution save layouts |
 | Device Keys | Per-family browser/import, conflicting IDs blocked | Complete official reference data |
 | DeviceConfig | Source editor, labels, MergeIcons and identity fields | Images/layout/textures and SDK build |
 | ActionDB | Fields, types/categories, meta-contexts, library import | Full databases and simulator loading |
