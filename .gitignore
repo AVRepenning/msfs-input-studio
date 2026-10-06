@@ -4,6 +4,8 @@ build/
 dist/
 *.spec
 research/community-profiles/
+research/fsprofiles/
+research/fsprofiles-options.csv
 research/*.json
 research/*.png
 *.log

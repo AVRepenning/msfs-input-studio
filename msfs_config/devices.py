@@ -226,10 +226,12 @@ class Controller:
 POV_DIRECTIONS = ('Up', 'Up_Right', 'Right', 'Down_Right', 'Down', 'Down_Left', 'Left', 'Up_Left')
 
 
-def changed_inputs(objects, baseline, current, split_axes=False):
+def changed_inputs(objects, baseline, current, split_axes=False, split_pov=True):
     """Buttons on rising edge, hats on direction change, axes beyond noise threshold."""
     detected = []
     for obj in objects:
+        if getattr(obj, 'derived', False):
+            continue
         if obj.offset not in baseline or obj.offset not in current:
             continue
         before, now = baseline[obj.offset], current[obj.offset]
@@ -238,5 +240,5 @@ def changed_inputs(objects, baseline, current, split_axes=False):
         elif obj.kind == 'axis' and abs(now - before) >= 0.18:
             detected.append(obj.msfs_name(('+' if now > before else '-') if split_axes else ''))
         elif obj.kind == 'pov' and now != before and now >= 0:
-            detected.append(obj.msfs_name(POV_DIRECTIONS[int((now + 2250) // 4500) % 8]))
+            detected.append(obj.msfs_name(POV_DIRECTIONS[int((now + 2250) // 4500) % 8] if split_pov else ''))
     return detected

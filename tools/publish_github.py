@@ -5,9 +5,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from msfs_config import __version__
 
 
 class APIError(RuntimeError):
@@ -56,6 +60,9 @@ def main():
     parser.add_argument('operation', choices=('check', 'create', 'release'))
     parser.add_argument('--owner', required=True)
     parser.add_argument('--repository', default='msfs-input-studio')
+    parser.add_argument('--version', default=__version__)
+    parser.add_argument('--asset-directory', type=Path)
+    parser.add_argument('--notes', type=Path, default=Path('RELEASE_NOTES.md'))
     args = parser.parse_args()
     token = credential()
     user = request(token, '/user')
@@ -71,20 +78,14 @@ def main():
         print(json.dumps({'repository': repo['full_name'], 'url': repo['html_url'], 'private': repo['private']}))
         return
     repo_name = args.owner + '/' + args.repository
+    tag = 'v' + args.version
+    asset_directory = args.asset_directory or Path('dist') / tag
     definition = {
-        'tag_name': 'v0.1.0', 'target_commitish': 'main', 'name': 'v0.1.0 — initial Windows test build',
+        'tag_name': tag, 'target_commitish': 'main', 'name': tag + ' — controller setup and recording improvements',
         'prerelease': True, 'draft': False,
-        'body': 'Portable Windows app for editing MSFS 2024 controller profiles with the simulator closed.\n\n'
-                'Includes Windows controller detection, searchable actions, individual and guided recording, '
-                'editable input names, primary/secondary bindings, axis tuning, input search and conflict filtering.\n\n'
-                'Validation: 14 automated tests passed, including round trips across 48 real profile exports; '
-                'the packaged executable passed startup and controller initialization. '
-                'XRAY hardware capture and generated-profile import/in-flight behavior still need user testing. '
-                'Full settings/developer-editor parity remains in progress; see FEATURE_MATRIX.md.\n\n'
-                'Download MSFSInputStudio.exe to run without installing Python. '
-                'MSFSInputStudio-source.zip contains the corresponding source and licensed reference fixtures.'}
+        'body': args.notes.read_text(encoding='utf-8')}
     try:
-        release = request(token, f'/repos/{repo_name}/releases/tags/v0.1.0')
+        release = request(token, f'/repos/{repo_name}/releases/tags/{tag}')
     except APIError as exc:
         if exc.status != 404:
             raise
@@ -94,7 +95,7 @@ def main():
     assets = []
     for filename, content_type in [('MSFSInputStudio.exe', 'application/octet-stream'),
                                    ('MSFSInputStudio-source.zip', 'application/zip')]:
-        data = (Path('dist') / filename).read_bytes()
+        data = (asset_directory / filename).read_bytes()
         existing = next((a for a in release['assets'] if a['name'] == filename), None)
         if existing:
             digest = 'sha256:' + hashlib.sha256(data).hexdigest()

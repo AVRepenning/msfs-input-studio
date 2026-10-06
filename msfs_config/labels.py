@@ -3,10 +3,13 @@ import json
 import os
 from pathlib import Path
 
-from .catalogue import normalized
+from .catalogue import normalized, input_identity
 
 
 class ControllerLabels:
+    @staticmethod
+    def input_key(guid, name):
+        return input_identity(name, 'keyboard') if guid.endswith(':keyboard') else normalized(name)
     def __init__(self, storage=True):
         self.path = (Path(os.environ.get('LOCALAPPDATA', '.')) / 'MSFSInputStudio/controller_labels.json') if storage is True else Path(storage) if storage else None
         self.devices = {}
@@ -25,11 +28,11 @@ class ControllerLabels:
             for name, label in labels.items():
                 if not isinstance(name, str) or not isinstance(label, str) or len(label) > 120:
                     raise ValueError('Invalid input label.')
-                self.devices.setdefault(guid.lower(), {})[normalized(name)] = label
+                self.devices.setdefault(guid.lower(), {})[self.input_key(guid, name)] = label
 
     def get(self, guid, input_name):
         labels = self.devices.get(guid.lower(), {})
-        result = labels.get(normalized(input_name))
+        result = labels.get(self.input_key(guid, input_name))
         if result:
             return result
         if input_name.rstrip().endswith(('+', '-')):
@@ -44,9 +47,9 @@ class ControllerLabels:
             raise ValueError('Use a name of 120 characters or fewer.')
         labels = self.devices.setdefault(guid.lower(), {})
         if label:
-            labels[normalized(input_name)] = label
+            labels[self.input_key(guid, input_name)] = label
         else:
-            labels.pop(normalized(input_name), None)
+            labels.pop(self.input_key(guid, input_name), None)
         self.save()
 
     def save(self):

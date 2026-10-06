@@ -89,10 +89,10 @@ def main():
             pressed[obj.offset] = True
             now = 1000 + index * 5
             poll_at(pressed, now)
-            poll_at(pressed, now + .5)
+            poll_at(pressed, now + .9)
             assert app.recording['index'] == index + 1
-            poll_at(baseline, now + 1)
-            poll_at(baseline, now + 1.5)
+            poll_at(baseline, now + 1.2)
+            poll_at(baseline, now + 1.7)
         assert app.recording is None
         assert app.profile.keys(*guided_targets[0], 'Primary')[0][0].strip() == first.msfs_name()
         assert app.profile.keys(*guided_targets[1], 'Primary')[0][0].strip() == second.msfs_name()
@@ -114,12 +114,10 @@ def main():
 
 
 def finish(root, app, devices, rows):
-    from PIL import ImageGrab
+    from tools.qa_workflow import capture_window
     screenshot = Path('research/ui-preview.png')
     screenshot.parent.mkdir(exist_ok=True)
-    image = ImageGrab.grab(bbox=(root.winfo_rootx(), root.winfo_rooty(),
-                                root.winfo_rootx() + root.winfo_width(), root.winfo_rooty() + root.winfo_height()))
-    image.save(screenshot)
+    capture_window(root, screenshot)
     results = {'gui_commands': 'passed', 'search_rows': rows,
                'devices': [d.name for d in devices],
                'live_objects': len(app.controller.objects) if app.controller else 0,

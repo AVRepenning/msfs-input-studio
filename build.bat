@@ -10,6 +10,6 @@ if exist ".venv\Scripts\python.exe" (
 if errorlevel 1 exit /b 1
 "%STUDIO_PYTHON%" -m unittest discover -s tests -v
 if errorlevel 1 exit /b 1
-"%STUDIO_PYTHON%" -m PyInstaller --noconfirm --clean --workpath "%LOCALAPPDATA%\MSFSInputStudio\build" --onefile --windowed --name MSFSInputStudio --add-data "data;data" --add-data "README.md;." --add-data "FEATURE_MATRIX.md;." --add-data "LICENSE;." --add-data "THIRD_PARTY_NOTICES.md;." msfs_input_studio.py
+"%STUDIO_PYTHON%" tools\build_app.py
 if errorlevel 1 exit /b 1
-echo Built dist\MSFSInputStudio.exe
+"%STUDIO_PYTHON%" tools\package_source.py

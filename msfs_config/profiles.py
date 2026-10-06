@@ -103,6 +103,9 @@ class Profile:
     def set_binding(self, context, name, slot, keys, defaults=None):
         if slot not in ('Primary', 'Secondary'):
             raise ValueError('Invalid binding slot.')
+        keys = list(keys)
+        if any(not information or not str(value).isdigit() for information, value in keys):
+            raise ValueError('Only verified numeric input IDs can be bound.')
         action = self.action(context, name, create=True, defaults=defaults)
         binding = action.find(slot)
         if binding is None and keys:
@@ -110,16 +113,16 @@ class Profile:
         if binding is None:
             return
         for node in list(binding):
-            if node.tag == 'KEY':
+            if node.tag == 'KEY' or (not keys and node.tag == 'Axis'):
                 binding.remove(node)
         for index, (information, value) in enumerate(keys):
-            if not information or not str(value).isdigit():
-                raise ValueError('Only verified numeric input IDs can be bound.')
             node = ET.Element('KEY', Information=information)
             node.text = str(value)
             binding.insert(index, node)
         if not len(binding):
             action.remove(binding)
+        if not keys and not action.findall('./Primary/Axis') and not action.findall('./Secondary/Axis'):
+            action.set('Flag', str(int(action.get('Flag', '2')) & ~4096))
 
     def keys(self, context, name, slot):
         action = self.action(context, name)
@@ -127,8 +130,8 @@ class Profile:
         return [(k.get('Information', ''), k.text or '') for k in binding.findall('KEY')] if binding is not None else []
 
     def set_axis(self, axis, values, action=None, slot='Primary'):
-        if axis not in AXES:
-            raise ValueError('Unknown DirectInput axis.')
+        if axis not in self.axis_names():
+            raise ValueError('Choose a standard axis or an axis present in this imported profile.')
         validate_axis(values)
         if action is None:
             parent = self.device.find('Axes')
@@ -143,10 +146,21 @@ class Profile:
             node = ET.SubElement(parent, 'Axis', AxisName=axis)
         node.attrib.update({k: str(v) for k, v in values.items()})
 
+    def axis_names(self):
+        observed = dict.fromkeys(node.get('AxisName') for node in self.device.findall('.//Axis') if node.get('AxisName'))
+        # GameInput profiles can use numeric axes. Retain their exact identities;
+        # their ordinals are not a verified mapping to DirectInput X/Y/etc.
+        numeric = [name for name in observed if name.isdecimal()]
+        return tuple(sorted(numeric, key=int)) + tuple(name for name in observed if name not in numeric) if numeric else tuple(dict.fromkeys((*AXES, *observed)))
+
     def validate(self):
         errors = []
         try:
-            uuid.UUID(self.device.get('GUID', '').strip('{}'))
+            from .catalogue import device_family
+            guid = self.device.get('GUID', '')
+            builtin = self.format == 'native' and guid == '{0}' and device_family(self.device.attrib) in ('keyboard', 'mouse', 'gamepad')
+            if not builtin:
+                uuid.UUID(guid.strip('{}'))
         except ValueError:
             errors.append('The device GUID is missing or invalid. Select a connected device or open a real export.')
         for field in ('DeviceName', 'ProductID', 'CompositeID', 'HWVer'):

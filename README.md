@@ -1,242 +1,186 @@
 # MSFS Input Studio
 
-A small, English-language, offline Windows editor for Microsoft Flight Simulator
-2024 controller profiles. It detects controllers through Windows DirectInput,
-reads buttons, axes and hats, and exports XML for the simulator's Controls-menu
-import. MSFS does not need to run while you create or edit profiles.
+A portable, English-language Windows editor for MSFS 2024 controller profiles.
+Create and edit profiles with the simulator closed, then import the exported XML
+through MSFS Controls. No Python, SDK, account or network connection is needed
+to run the executable.
 
-[Download the Windows test build and source archive](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.1.0).
-The repository and downloads are private and require access to AVRepenning's GitHub account.
+[Download v0.2.0](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.0).
+This repository and its downloads are private. The updated local executable is
+`dist/v0.2.0/MSFSInputStudio.exe`; an earlier open executable can remain running.
 
-**Status: first runnable build, awaiting simulator validation.** XML preservation,
-Windows enumeration/polling and app commands have been tested. Importing a newly
-generated profile and flying with it have **not** been tested in MSFS 2024 yet.
-This is not a claim of complete support for every device or every simulator action.
+**Status: test build, with simulator and XRAY validation still outstanding.**
+Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
 
-The expanded settings/developer-menu baseline is tracked in `FEATURE_MATRIX.md`.
-The current build is ready for initial hardware/import testing; full feature
-parity remains work in progress.
+## Set up a controller
 
-## Run
-
-Double-click `dist/MSFSInputStudio.exe`. No Python installation, SDK, account,
-administrator privileges or internet connection are required to run it. Connect
-the controller before starting, or click **Refresh** after connecting it.
-
-For source development, use Python 3.12 or newer with Tkinter:
-
-```powershell
-python msfs_input_studio.py
-```
-
-## Set up controls
-
-1. Select a Windows controller. Its axes, buttons and hats are read from Windows;
-   there is no model-specific MeridianGMT XRAY definition.
-2. Select **General controls**, **Airplane controls** or **Helicopter controls**.
-   Each type is a separate profile. Changing type creates a new profile, with an
-   unsaved-changes prompt if necessary.
-3. Search by action name, event ID or context. Click column headings to sort;
-   filter by context or show only bound actions. **All profile types** shows
-   actions from other types, but prevents assigning them to an incompatible type.
-4. Select a control, then **Get Input** and press/move the controller. You can
-   also choose a reported input and click **Use**. **Add to chord** combines it
-   with the existing input. Use **Secondary** for an alternative binding.
-5. In **Behavior**, choose the required flags and click **Apply behavior**.
-   Digital normally repeats while held; **Once on press** sends one event;
-   **On release** sends on release. **Delayed / hold** uses **Delay (s)**.
-   Full-range axes automatically get the Axis type when bound. Numeric flags
-   remain editable for advanced use and imported values are preserved.
-6. **Axis tuning** supports positive/negative sensitivity, inner/outer deadzones,
-   neutral and response rate, globally or per primary/secondary binding. Click
-   **Apply axis settings**. The live indicator displays raw Windows position;
-   it does not pretend to reproduce MSFS's undocumented response-curve math.
-7. **Export XML**, then import it in MSFS when you want to use it.
-
-**Live inputs** shows the controller's raw values and whether an MSFS input ID
-is available. Capture times out after 12 seconds; Escape cancels. Undo/redo
-stores up to 60 edit states. Duplicate gives a profile a new name; exports always
-use a Save As dialog, so you choose where the XML is written.
-
-### Guided recording, input search and controller names
-
-Use Ctrl/Shift to select several actions and click **Record selected**. Choose
-Primary or Secondary before starting. The app records one action at a time,
-waits for buttons/hats to release and axes to settle, then advances. **Skip**
-leaves an action unchanged; **Stop** keeps the bindings already recorded. Unknown
-MSFS input IDs are still blocked. This records assignments, not timed macros.
-
-**Find input** listens for a physical input and filters to actions using it.
-**Clear input filter** removes that filter. **Conflicts** shows potential reuse
-of the same complete chord by different actions within the same context. Reuse
-can be intentional; the app does not erase other bindings automatically.
-
-In **Live inputs**, select a row, enter a name such as Landing gear or Roll, then
-click **Set name**. You can name every reported button/axis, including inputs
-whose MSFS ID is not yet known. **Reset** restores the Windows name. Labels
-appear in the picker and binding list, persist in
-`%LOCALAPPDATA%/MSFSInputStudio/controller_labels.json`, and are included in an
-adjacent `.studio.json` file when exporting a named controller profile. Keep
-that sidecar with the XML when sharing profiles with this app. MSFS imports only
-the XML; labels do not replace its internal input names or numeric IDs.
-
-## Add the profile to MSFS 2024
-
-Microsoft now documents native controller profile import. The older handoff's
-Community-package route is not required for this workflow:
-
-1. Open MSFS 2024 → **Settings → Controls**.
-2. Select the **same controller** used when creating the exported file.
-3. Click the cogwheel for the matching **General / Airplane / Helicopter** profile.
-4. Choose **Import**, select the XML, and select the resulting preset.
-5. Set your desired aircraft/default assignment, then test in flight.
-
-General and aircraft controls must be imported into their respective profile
-types. For standard aircraft you can create an Airplane preset here and assign
-it to the aircraft in MSFS. Existing aircraft-specific metadata is preserved when
-opening a real exported profile. Creating third-party aircraft action databases
-or inventing aircraft identifiers is not supported.
+1. Connect the controller, start the app and select it. **Refresh** discovers
+   hardware connected after startup. **Test controller** opens numbered button
+   lights, XY position, numeric axis values and scales. Click an input, enter a
+   useful name, then **Set name**.
+2. Click **New** and choose General, Airplane or Helicopter. **Saved** opens a
+   copy of an existing local Store preset; **Open XML** opens a simulator export.
+   Each profile type is a separate simulator preset.
+3. **Show** changes which controls you browse without changing the profile.
+   Search names, event IDs, contexts and assigned input labels; filter by group,
+   context, bound/unbound or possible conflicts. Column headings sort the list.
+4. Select an action and click **Get Input** in Primary or Secondary. The panel
+   shows recording state, remaining time, detected inputs and the result. Press
+   chords together or move the intended axis. Diagonal stick movement captures
+   the dominant axis. **Listen to** restricts capture to buttons/keys, axes or
+   hats. Split-axis/split-hat options support directional inputs. **Use** and
+   **Add to chord** offer manual assignment from the input list.
+5. **Guided setup** offers starter controls for the current type. Select actions
+   with Ctrl/Shift and **Record selected** for your own sequence. The app waits
+   for recorded buttons to release and axes to settle. **Skip**, **Stop**,
+   **Try again** and **Continue anyway** handle interruptions.
+6. **Find input** listens and jumps to its assigned action. **Follow controller**
+   does this repeatedly. Search clears hiding filters and includes keyboard
+   modifiers stored in flags. Review **Behavior**, **Axis tuning** and conflicts.
+7. **Edit selected…** or right-click offers batch clearing/behavior. **Undo**,
+   **Redo** and Tools → **Undo history** restore named states. Snapshots are
+   compressed to keep memory use down.
+8. **Export XML**. In MSFS Settings → Controls, select the same device and
+   matching profile type, open its cogwheel, choose Import, select the XML and
+   activate the resulting preset. Set aircraft/default assignment in MSFS and
+   test in flight.
 
 See [Microsoft's import/export instructions](https://flightsimulator.zendesk.com/hc/en-us/articles/21862909046428-How-to-Export-and-Import-your-controller-profiles).
 
-## Real input IDs, with no guessed bindings
+Capture times out after 12 seconds and settles 0.65 seconds after the last new
+input. Escape stops recording unless **Allow recording Escape** is selected;
+the panel's **Stop listening** remains available. Failed capture preserves the
+old binding and pauses a guided session for retry/skip. Recording assigns
+controls; it does not replay timed gameplay macros.
 
-`data/catalogue.json` contains **3,719 action/context entries** and **72 exact
-input-name/ID pairs** observed in 48 public, real MSFS 2024 exports. The action
-list includes controls not currently bound in those files. Names are readable
-event IDs, not the simulator's localized labels. Coverage is broad, but is
-limited to those exports and can differ from your simulator version.
+## Working copies, profiles and names
 
-The SDK does not document the numeric input-ID encoding. No unobserved button
-ID or axis name is extrapolated. For example, Button 1's ID 0 is verified; some
-higher-numbered buttons have no reference yet, even though Windows detects them.
-Those inputs are marked **needs reference** and cannot be bound/exported with an
-invented ID. **Open XML** containing that input learns the real mapping and any
-new actions. Learned mappings persist in
-`%LOCALAPPDATA%/MSFSInputStudio/learned_catalogue.json`. Conflicting IDs are
-quarantined for new bindings rather than silently replaced. Already imported
-bindings keep their original numbers during round-trip editing.
+Edits are saved to local working copies every three seconds and before switching
+profiles. Tools → **Resume local working copy** opens them. These are separate
+from exported XML and simulator saves. Exports use a file picker; saving into
+the managed Store cloud-save folder is blocked.
 
-The Windows instance GUID and product ID are detected through DirectInput. New
-profiles use `CompositeID=0` and `HWVer=1.0.0.0`; these values are not verified for
-every composite device. If XRAY exposes multiple logical controllers, or MSFS
-rejects its identity, open one real export from that logical controller so its
-metadata is preserved. A one-time reference export may therefore be necessary
-for inputs or devices outside the verified library. Subsequent editing works
-with MSFS closed. Initial creation for arbitrary unsupported hardware without
-ever opening MSFS is **not yet guaranteed**.
+**Saved** reads profile XML copies from the Microsoft Store WGS folder, without
+modifying them. Copies supply real input IDs, device identity and extra actions.
+When references exist, keyboard/mouse profiles enable native Windows capture;
+XInput references enable connected XInput gamepads. Open XML can supply exported
+references for these formats too.
 
-DirectInput game controllers are supported in this build. XInput-only controls,
-VR devices, proprietary panels, keyboard/mouse capture, and controller-specific
-features beyond the standard 8 axes, 4 hats and 128 buttons are not validated.
-Changing the live controller does not automatically retarget an open profile;
-**Use for this profile** explicitly transfers its Windows identity. Review all
-bindings when transferring between physical controllers.
+Names are aliases tied to the controller, without replacing MSFS's internal
+names/IDs. They persist locally and travel with exports in an adjacent
+`.studio.json` sidecar. Keep it alongside XML when sharing with this app; MSFS
+reads only XML. App data lives in `%LOCALAPPDATA%/MSFSInputStudio`:
+`controller_labels.json`, `learned_catalogue.json`, `drafts/` and `error.log`.
 
-## XML formats and package findings
+Changing the live controller keeps the profile's identity. **Use for this
+profile** explicitly transfers between controllers of the same input family;
+review every assignment. Create a new profile to switch between keyboard,
+mouse, gamepad and joystick, which use different input-ID formats.
 
-Real Controls-menu exports are **XML fragments** with multiple top-level nodes:
-`Version`, `FriendlyName`, and `Device`; they are not a single-root XML document.
-The parser uses an internal wrapper and removes it during serialization. It
-preserves unknown elements/attributes, comments, multiple keys per binding,
-secondary bindings, `AircraftInfo`, per-binding curves, flags, delay, and values.
-Whitespace and formatting can change; the test compares semantic data.
+## Settings and developer tools
 
-SDK files use a `DefaultInput` root. They can be opened and edited without
-converting their format. A saved SDK file is **not claimed to be a native
-Controls-menu import file**. Use a native export or New for that workflow.
+- Primary/secondary slots and multi-key chords.
+- All 16 documented flag bits, numeric flags, custom event value and delay.
+  Digital repeats while held; Once on press sends once; On release sends on
+  release; Delayed / hold uses delay. Simulator behavior still needs validation.
+- All six axis fields: positive/negative sensitivity, inner/outer deadzones,
+  neutral and response rate, globally or in either slot. Imported GameInput
+  numbered axes retain their identity and are editable, without assuming a
+  DirectInput mapping. Values show raw normalized controller input, not an
+  emulation of MSFS's response curve. Mouse movement is a relative pixel preview.
+- Profile/device metadata, including existing aircraft-specific fields.
+- Device Keys reference browser and reference-profile/ActionDB imports.
+- Structured DeviceConfig, ActionDB and remapDB source editors: device labels,
+  MergeIcons, action type/category/description, meta-contexts and remap AND/OR
+  alternatives. Unknown XML fields and comments remain intact.
+- SDK DefaultInput export, keeping its distinction from native import files.
 
-The app detects Store and Steam package locations from `UserCfg.opt`. On this
-computer it found the Microsoft Store configuration and both `Community2024`
-and `Community`. It does not edit Xbox WGS/cloud-save files or Microsoft game
-packages. Automatic Community installation, `manifest.json`/`layout.json`,
-`DeviceConfig.xml`, texture generation and SDK package building are **not enabled**.
-Their exact loading behavior has not been validated. Writing a plausible folder
-structure would not demonstrate that MSFS loads the resulting preset.
+SDK tools edit source XML. Texture/device-layout authoring, package building and
+Community deployment are incomplete. The SDK is not installed here; source
+validation does not establish SDK or simulator acceptance.
 
-SDK documentation says positive sensitivity is 0–100 and negative sensitivity
-is −100–0. Real exports include other values on both sides, so this editor uses
-−100–100 for both. This is an observed compatibility decision, not a claim that
-the SDK text was tested against every simulator release.
+## Reference coverage and limitations
 
-## Build a portable executable
+The bundled library has **3,719 action/context entries** and **72 exact joystick
+input-name/ID pairs** from 48 public MSFS 2024 exports. English names and groups
+cover **1,652 entries**, joined by exact event ID from MIT-licensed FSProfiles.
+Other labels derive from event names. This is not a complete current SDK database.
 
-Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` uses the project's venv
-when present, otherwise `python` on PATH. It installs the pinned build tools,
-runs the tests, and runs PyInstaller with `--onefile --windowed`.
-Intermediate build files go to `%LOCALAPPDATA%/MSFSInputStudio/build` to avoid
-OneDrive locks on the project directory; the executable is written to `dist`.
+Local scans/imports learn real references. IDs are scoped to joystick, keyboard,
+mouse and gamepad; keyboard punctuation remains distinct. Contradictory IDs are
+quarantined for new assignments, while imported bindings retain their numbers.
+**Needs reference** inputs never receive extrapolated IDs. Import a real profile
+containing the input to learn its mapping.
 
-To retrieve the 48 XML fixtures needed for the corpus test:
+DirectInput polls the standard layout of up to eight axes, four hats and 128
+buttons. XInput, keyboard and mouse use separate readers. VR/proprietary devices,
+GameInput beyond that DirectInput layout and device-specific extensions remain
+incomplete. XRAY's enumeration has not been tested. Composite controllers may
+need an actual export to establish CompositeID/hardware metadata. New detected
+DirectInput profiles default to CompositeID 0 and hardware version 1.0.0.0.
 
-```powershell
-git clone --depth 1 https://github.com/highinthefssky/msfs-2024-controls-settings.git research/community-profiles
-```
+Native profiles have multiple top-level elements. The parser's internal wrapper
+is removed on export. Unknown XML, comments, chords, secondary slots, aircraft
+metadata and overrides are preserved semantically; whitespace can change.
+SDK DefaultInput files retain their format and are not asserted to be native
+Controls-menu imports.
 
-The reference revision is recorded in `THIRD_PARTY_NOTICES.md`; the corpus should
-contain 48 files. If upstream changes, use that revision for reproducibility.
+## Build and verify
+
+Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` installs pinned tools,
+runs tests, builds a windowed one-file executable into `dist/v0.2.0` and creates
+a source archive there. Intermediate files go to LocalAppData to avoid OneDrive
+locks. The source archive includes the public fixtures; a fresh Git checkout
+needs these retrieved separately:
 
 ```powershell
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
+git clone --depth 1 https://github.com/highinthefssky/msfs-2024-controls-settings.git research/community-profiles
 build.bat
 ```
 
-To regenerate the catalogue: `python tools/analyze_profiles.py`.
-GUI QA (`tools/qa_ui.py`) additionally needs Pillow, available in the development
-runtime used here; Pillow is not part of the app or its build requirements.
+Fixture revisions/licences are in `THIRD_PARTY_NOTICES.md`. Regenerate with
+`python tools/analyze_profiles.py`, then `python tools/enrich_catalogue.py`.
+Private Store profiles and working copies are not packaged.
 
-## Verification and first in-simulator test
+Validation:
 
-Completed checks:
+- 38 automated tests, including semantic round trips across all 48 public
+  fixtures, per-family identity/conflicts, numbered axes, SDK data, XInput
+  translation, read-only scans and working-copy preservation.
+- 20 actual Tk controller/UI workflow checks and seven keyboard/mouse checks,
+  with simulated press/motion streams. Slow chords, held switches, retry, Escape,
+  navigation, labels, batch undo, working-copy recovery and export are exercised.
+- Windows enumerates the connected PowerA FlightDeck's seven axes and 27 buttons.
+  Keyboard/mouse readers initialize. Physical manipulation and a connected
+  native XInput device have not been tested.
+- Screenshots inspected at regular/smaller sizes. The full test window displays
+  all seven axis scales and 27 button lights; smaller panels scroll.
+- Packaged startup and embedded-resource loading checked outside the source
+  directory.
 
-- All 48 public native export files: read → write → read preserves semantic XML.
-- Tests cover unknown data, chords, secondary bindings, SDK documents, input ID
-  zero, missing IDs, conflicts, axis validation and capture noise/hat direction.
-- Windows DirectInput initialized and opened the connected **Xbox Series X
-  PowerA FlightDeck Wireless**, reporting **7 axes and 27 buttons**. Polling
-  succeeded. Physical manipulation of those controls was not performed.
-- Automated UI commands tested search, binding, axis overrides, XML export and
-  undo/redo, plus a simulated two-action guided recording session, controller
-  naming and sidecar export; the application screenshot was inspected for layout.
-- The packaged 64-bit windowed executable passed startup/capture initialization
-  from a different working directory, loading its embedded catalogue and opening
-  the connected controller without relying on source-file paths.
-
-Still needs your test in MSFS:
-
-1. Plug in MeridianGMT XRAY and run the app. Check reported counts and live values.
-2. Create an Airplane profile with one verified axis and one verified button.
-3. Export, then import under XRAY's Airplane profile cogwheel.
-4. Check the preset appears and both bindings function in flight.
-5. Test held/release behavior, curves, secondary bindings and a General profile.
-
-If import fails, record the error and export a small working profile from MSFS
-for the same controller and type. That will let us compare the actual required
-metadata rather than guess. This build is ready for that validation step, not
-certified as finished in-game.
-
-For startup failures see `%LOCALAPPDATA%/MSFSInputStudio/error.log`.
-Unattended diagnostic options:
+`tools/qa_ui.py` and `tools/qa_workflow.py` use Pillow for development screenshots.
+`tools/qa_system_workflow.py` needs local keyboard/mouse reference profiles.
+Pillow is not needed to build or run the app.
 
 ```powershell
-dist/MSFSInputStudio.exe --diagnose controller-diagnostics.json
-dist/MSFSInputStudio.exe --smoke-test app-smoke.json
+dist/v0.2.0/MSFSInputStudio.exe --smoke-test app-smoke.json
+dist/v0.2.0/MSFSInputStudio.exe --diagnose controller-diagnostics.json
 ```
+
+Next acceptance: connect XRAY, check its live inputs, export one verified axis
+and button, import into the matching MSFS preset type, and test in flight.
+Then test secondary, held/release, curves and General controls. If import fails,
+compare a real working export from the same controller/type.
 
 ## Sources and licence
 
-- [Input Profiles](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Input_Profiles.htm)
-- [Input Configuration XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Input_Configuration_XML_Properties.htm)
-- [DeviceConfig XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/DeviceConfig_XML_Properties.htm)
-- [Device Profiles](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Device_Profiles.htm)
-- [ActionDB XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Actiondb_XML_Properties.htm)
-- [Input Device Editor](https://docs.flightsimulator.com/msfs2024/html/2_DevMode/Input_Editors/The_Input_Device_Editor.htm)
 - [Input Profile Editor](https://docs.flightsimulator.com/msfs2024/retail/devmode/editors/input-editors/the-input-profile-editor/)
-- [Developer Mode](https://docs.flightsimulator.com/msfs2024/html/2_DevMode/Developer_Mode.htm)
-- [Reference exports](https://github.com/highinthefssky/msfs-2024-controls-settings)
-- [Windows DirectInput device enumeration](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee417804(v=vs.85))
+- [Input configuration XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Input_Configuration_XML_Properties.htm)
+- [DeviceConfig XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/DeviceConfig_XML_Properties.htm)
+- [ActionDB XML](https://docs.flightsimulator.com/msfs2024/html/5_Content_Configuration/Input/Actiondb_XML_Properties.htm)
+- [Public reference profiles](https://github.com/highinthefssky/msfs-2024-controls-settings)
+- [English action metadata](https://github.com/iadarroch/FSProfiles)
 
-GPL-3.0-or-later. See `LICENSE` and `THIRD_PARTY_NOTICES.md`. The original prototype
-was not supplied and no public download for its exact filename was found; this
-implementation was rebuilt from the handoff and the verified export examples.
+GPL-3.0-or-later; see `THIRD_PARTY_NOTICES.md`. Independent of Microsoft/Asobo.
