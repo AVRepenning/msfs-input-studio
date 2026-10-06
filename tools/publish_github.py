@@ -1,5 +1,6 @@
 """Publish this project using Git's existing GitHub credentials; never print them."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,12 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+class APIError(RuntimeError):
+    def __init__(self, status, message):
+        self.status = status
+        super().__init__(f'GitHub API returned {status}: {message}')
 
 
 def credential():
@@ -30,13 +37,18 @@ def request(token, path, method='GET', payload=None, content_type=None):
     if data is not None:
         headers['Content-Type'] = content_type or 'application/json'
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=180) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        # Return only API error data; never print request headers or credentials.
-        body = json.loads(exc.read().decode())
-        raise RuntimeError(f'GitHub API returned {exc.code}: {body.get("message", "request failed")}') from None
+    for attempt in range(3 if method == 'GET' else 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30 if method == 'GET' else 60) as response:
+                result = response.read()
+                return json.loads(result) if result else {}
+        except urllib.error.HTTPError as exc:
+            # Return only API error data; never print headers or credentials.
+            body = json.loads(exc.read().decode())
+            raise APIError(exc.code, body.get('message', 'request failed')) from None
+        except (TimeoutError, urllib.error.URLError):
+            if attempt == (2 if method == 'GET' else 0):
+                raise RuntimeError('GitHub did not respond. Rerun this command; release publication resumes safely.') from None
 
 
 def main():
@@ -59,7 +71,7 @@ def main():
         print(json.dumps({'repository': repo['full_name'], 'url': repo['html_url'], 'private': repo['private']}))
         return
     repo_name = args.owner + '/' + args.repository
-    release = request(token, f'/repos/{repo_name}/releases', 'POST', {
+    definition = {
         'tag_name': 'v0.1.0', 'target_commitish': 'main', 'name': 'v0.1.0 — initial Windows test build',
         'prerelease': True, 'draft': False,
         'body': 'Portable Windows app for editing MSFS 2024 controller profiles with the simulator closed.\n\n'
@@ -70,12 +82,27 @@ def main():
                 'XRAY hardware capture and generated-profile import/in-flight behavior still need user testing. '
                 'Full settings/developer-editor parity remains in progress; see FEATURE_MATRIX.md.\n\n'
                 'Download MSFSInputStudio.exe to run without installing Python. '
-                'MSFSInputStudio-source.zip contains the corresponding source and licensed reference fixtures.'})
+                'MSFSInputStudio-source.zip contains the corresponding source and licensed reference fixtures.'}
+    try:
+        release = request(token, f'/repos/{repo_name}/releases/tags/v0.1.0')
+    except APIError as exc:
+        if exc.status != 404:
+            raise
+        release = request(token, f'/repos/{repo_name}/releases', 'POST', definition)
+    print(json.dumps({'release': release['html_url'], 'stage': 'uploading assets'}), flush=True)
     upload_url = release['upload_url'].split('{', 1)[0]
     assets = []
     for filename, content_type in [('MSFSInputStudio.exe', 'application/octet-stream'),
                                    ('MSFSInputStudio-source.zip', 'application/zip')]:
         data = (Path('dist') / filename).read_bytes()
+        existing = next((a for a in release['assets'] if a['name'] == filename), None)
+        if existing:
+            digest = 'sha256:' + hashlib.sha256(data).hexdigest()
+            if existing['state'] != 'uploaded' or existing['size'] != len(data) or (existing.get('digest') and existing['digest'] != digest):
+                raise RuntimeError(f'The existing release asset {filename} does not match the local file.')
+            assets.append({'name': existing['name'], 'size': existing['size'], 'url': existing['browser_download_url']})
+            print(json.dumps({'already_uploaded': filename}), flush=True)
+            continue
         asset = request(token, upload_url + '?name=' + urllib.parse.quote(filename),
                         'POST', data, content_type)
         assets.append({'name': asset['name'], 'size': asset['size'], 'url': asset['browser_download_url']})
