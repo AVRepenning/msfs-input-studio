@@ -129,7 +129,8 @@ def main():
         print(json.dumps(result, indent=2))
     finally:
         app.saved_text = app.profile.to_text() if app.profile else None
-        app.close()
+        with patch.object(app, 'can_discard', return_value=True):
+            app.close()
 
 
 if __name__ == '__main__':

@@ -1,34 +1,19 @@
-Portable Windows controller-profile editor for use with MSFS 2024 closed.
+v0.3.0 makes General and aircraft profiles parts of one controller setup.
 
-v0.2.3 fixes:
+- Switch General/Airplane/Helicopter without replacing profiles or opening a New dialog. Bindings, names, tuning, browsing state and each layer's Undo/Redo history remain intact.
+- Selecting a camera control opens General automatically; selecting flaps opens Airplane. All controls and Bound only show existing bindings from the relevant layers together, with a Stored in column.
+- Find input and Follow controller navigate to bindings across layers. Guided recording can cover General and aircraft actions in one sequence.
+- Save setup stores all profiles and input names in one portable `.msfssetup` file. Open controller setup restores them. Complete setups autosave locally and recover at startup. Reopening an older saved setup retains newer edits as another working copy.
+- Export setup creates separate native XML profiles, input-name sidecars and an import guide. Existing files are kept. Import each file for the same controller under its matching type, then select one General and one aircraft preset together in MSFS.
+- Imported and duplicated presets stay selectable alternatives. Existing aircraft-specific metadata is preserved. Use for setup copies every layer to another controller of the same input format and keeps the original.
+- Clear New setup / Save setup / MSFS presets / Export setup buttons, matching feedback and walkthrough. All four remain accessible at the minimum window size. MSFS presets still load asynchronously with progress/retry feedback.
 
-- Removed the redundant "NOT RECORDING" suffix from Exported, Saved, profile-opening, search and error messages. Messages now show the result directly. Idle says Ready; cancelling capture says Stopped. Active recording still shows listening, countdown and detected-input feedback.
-- Clarified that MSFS applies General and aircraft profiles together on the same controller. The selector is labelled Editing; profile guidance, new-profile text, export feedback and the import guide explain how camera and flight bindings work together.
+The profile workflow follows [Microsoft's Controls FAQ](https://flightsimulator.zendesk.com/hc/en-us/articles/16459737949980-Controller-Settings-FAQ), [SDK profile/context rules](https://docs.flightsimulator.com/msfs2024/retail/content-configuration/input/input-profiles/) and [import instructions](https://flightsimulator.zendesk.com/hc/en-us/articles/21862909046428-How-to-Export-and-Import-your-controller-profiles). General and aircraft files remain separate on export because MSFS can ignore actions stored in a disallowed profile context. MSFS_DOCUMENTATION_REVIEW.md records the audit and remaining gaps.
 
-v0.2.2 fixes:
+Validation: 56 automated tests, semantic round trips across 48 public profile exports, and 65 actual Tk UI checks (20 controller, 7 keyboard/mouse, 14 MSFS-presets/flaps, 8 camera, 16 complete-setup workflow). Recording streams are simulated. Windows enumerates the PowerA FlightDeck's 7 axes and 27 buttons. The MSFS-presets browser was also checked against 30 local Store profiles, read only.
 
-- Camera/view controls no longer leave an unexplained empty list when browsing an Airplane or Helicopter profile. The list explains that matching controls belong to General profiles and offers Show matching controls from all profiles, preserving the search and existing bindings.
-- Unified the Camera and Camera / views browsing groups, bringing all 470 known camera/view entries together. Native profile categories and control IDs are preserved.
-- Added clear guidance and a Clear filters button for other empty results, including conflicting bound/unbound filters.
+The v0.3.0 portable executable launched successfully outside the source directory. Its embedded catalogue loaded all 3,719 entries, Windows opened the controller, and General/Airplane switching retained the original profile. The packaged startup check exited normally.
 
-v0.2.1 fixes:
+This is a test build. XRAY hardware, generated-profile import and in-flight behavior still need validation. Exhaustive current action coverage, creating additional aircraft categories/model identifiers, complete cross-layer runtime conflict analysis, VR/proprietary devices and SDK package deployment remain incomplete. See FEATURE_MATRIX.md. Saved setups preserve XML and names; session Undo history is not stored in the setup file.
 
-- Fixed the Saved-browser freeze caused by repeatedly rebuilding each profile's action map while counting bindings. Counting 30 local profiles dropped from about 40 seconds to 0.17 seconds with identical results.
-- Saved now opens immediately, scans in the background, shows loading progress and provides Refresh/retry feedback. Existing results remain usable after a scan failure. Closing the app cancels the scan.
-- Flaps and other aircraft controls now explain why a General profile cannot bind them and offer a matching profile. Empty profiles can switch type while keeping their name, device identity and axis tuning; Undo/Redo restores the change. Profiles with existing controls use a separate New profile dialog.
-- The profile-type dropdown is available, disabled recording buttons have a clear disabled appearance, and conflict detection avoids repeated action-map rebuilding when opening large profiles.
-
-- Prominent recording, countdown, detected-input, retry, stopped and saved feedback; an always-accessible Stop listening button.
-- Windows-style numbered button lights, XY position and every reported axis with numeric values and scales. A larger controller-test window supports naming inputs.
-- Independent airplane/helicopter/general browsing, English names for 1,652 catalogue entries, groups, bound/unbound filters and guided setup.
-- Press an input to select and scroll to its assignments. Follow mode supports repeated searches; modifier flags and split-axis bindings are included.
-- Slower chord capture, dominant-axis detection, guided progress and release handling for permanently held switches.
-- Keyboard/mouse capture and an XInput backend, enabled by real profile references. Store profiles are opened as copies and extend the local reference library.
-- Local automatic working copies, compressed named undo history, batch editing and device/aircraft metadata editing.
-- Device Keys reference browser, DeviceConfig/ActionDB/remapDB source editors and SDK DefaultInput export. Imported numbered axes remain editable.
-
-Validation: 45 automated tests, semantic round trips across 48 public profile exports, 20 controller/UI workflow checks, 7 keyboard/mouse workflow checks, 14 Saved/flaps regression checks and 8 camera workflow checks. The Saved browser was tested against 30 real local profiles, including opening the largest as a copy. Camera checks reproduce the hidden list and record a simulated button binding in a separate General profile while preserving existing flaps bindings. Input streams are simulated; the connected PowerA FlightDeck reports 7 axes and 27 buttons. Native readers and the packaged executable are checked on Windows.
-
-This is a test build. XRAY hardware, generated-profile import and in-flight behavior still need simulator validation. Exhaustive current action coverage, VR/proprietary devices, SDK image/layout authoring and package deployment remain incomplete; see FEATURE_MATRIX.md.
-
-Download **MSFSInputStudio.exe** to run without installing Python. **MSFSInputStudio-source.zip** contains the corresponding source, licences and public reference fixtures. Your private Store profiles and local working copies are not included.
+Download **MSFSInputStudio.exe** for the portable build. **MSFSInputStudio-source.zip** contains the corresponding source, licences and public reference fixtures. Private Store profiles, controller names and local working copies are not included.

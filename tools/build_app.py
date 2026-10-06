@@ -15,7 +15,7 @@ def main():
     command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
                '--workpath', str(work), '--distpath', str(target), '--onefile', '--windowed',
                '--name', 'MSFSInputStudio', '--add-data', 'data;data']
-    for name in ('README.md', 'FEATURE_MATRIX.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'):
+    for name in ('README.md', 'FEATURE_MATRIX.md', 'MSFS_DOCUMENTATION_REVIEW.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'):
         command.extend(['--add-data', name + ';.'])
     subprocess.run(command + ['msfs_input_studio.py'], cwd=root, check=True)
     print('Built ' + str(target / 'MSFSInputStudio.exe'))

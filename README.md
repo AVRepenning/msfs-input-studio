@@ -5,9 +5,9 @@ Create and edit profiles with the simulator closed, then import the exported XML
 through MSFS Controls. No Python, SDK, account or network connection is needed
 to run the executable.
 
-[Download v0.2.3](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.3).
+[Download v0.3.0](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.3.0).
 This repository and its downloads are private. The updated local executable is
-`dist/v0.2.3/MSFSInputStudio.exe`; an earlier open executable can remain running.
+`dist/v0.3.0/MSFSInputStudio.exe`; an earlier open executable can remain running.
 
 **Status: test build, with simulator and XRAY validation still outstanding.**
 Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
@@ -18,22 +18,20 @@ Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
    hardware connected after startup. **Test controller** opens numbered button
    lights, XY position, numeric axis values and scales. Click an input, enter a
    useful name, then **Set name**.
-2. Click **New** and choose General, Airplane or Helicopter. **Saved** opens a
-   copy of an existing local Store preset; **Open XML** opens a simulator export.
-   Each profile type is a separate simulator preset. MSFS uses General and
-   aircraft presets together on the same controller: camera/menu bindings in
-   General work alongside flight bindings in Airplane or Helicopter. The
-   **Editing** selector chooses the XML file being edited, not which controller
-   functions can work during flight.
-   Saved profiles load in the background with progress and retry feedback.
-   If a control belongs to another type, the editor explains why it is disabled
-   and offers a matching profile. An empty profile can change type while keeping
-   its name, controller and axis settings; existing controls use a separate
-   **New** profile dialog. The profile-type dropdown offers the same workflow.
+2. Click **New setup**. Switch **Editing** between General, Airplane and
+   Helicopter to configure one controller setup. Each layer keeps its bindings,
+   name, tuning, browsing state and Undo/Redo history when you switch.
+   Selecting a camera action opens General automatically; selecting flaps opens
+   Airplane. Both remain in the setup. **MSFS presets** loads local Store saves
+   in the background with progress/retry feedback. **Open XML** adds a simulator
+   export as another preset for the same controller, preserving earlier edits.
+   Imported aircraft-specific metadata remains in a separate selectable preset.
 3. **Show** changes which controls you browse without changing the profile.
+   **All controls** is the default and shows bindings from the relevant setup
+   layers together. **Stored in** identifies the layer each action edits.
    Search names, event IDs, contexts and assigned input labels; filter by group,
    context, bound/unbound or possible conflicts. Column headings sort the list.
-   Camera/view controls use a General profile. If the current profile hides all
+   Camera/view controls use General. If a restricted view hides all
    matching controls, the list explains why and offers **Show matching controls
    from all profiles** while preserving your search. **Clear filters** handles
    other empty searches. Camera source groups appear together as **Camera / views**.
@@ -44,19 +42,27 @@ Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
    hats. Split-axis/split-hat options support directional inputs. **Use** and
    **Add to chord** offer manual assignment from the input list.
 5. **Guided setup** offers starter controls for the current type. Select actions
-   with Ctrl/Shift and **Record selected** for your own sequence. The app waits
+   with Ctrl/Shift and **Record selected** for your own sequence, including
+   General and aircraft actions in one session. The app switches layers as needed
+   and waits
    for recorded buttons to release and axes to settle. **Skip**, **Stop**,
    **Try again** and **Continue anyway** handle interruptions.
-6. **Find input** listens and jumps to its assigned action. **Follow controller**
+6. **Find input** listens and jumps to its assigned action across the setup,
+   switching to the profile holding the binding. **Follow controller**
    does this repeatedly. Search clears hiding filters and includes keyboard
    modifiers stored in flags. Review **Behavior**, **Axis tuning** and conflicts.
 7. **Edit selected…** or right-click offers batch clearing/behavior. **Undo**,
    **Redo** and Tools → **Undo history** restore named states. Snapshots are
    compressed to keep memory use down.
-8. **Export XML**. In MSFS Settings → Controls, select the same device and
-   matching profile type, open its cogwheel, choose Import, select the XML and
-   activate the resulting preset. Set aircraft/default assignment in MSFS and
-   test in flight.
+8. **Save setup** (Ctrl+S) stores all profiles and input names together in one
+   `.msfssetup` file. Tools → **Open controller setup** (Ctrl+O) reopens it in this app.
+   **Export setup** creates a separate native XML for every profile, alias
+   sidecars and `IMPORT-SETUP.txt`. Existing files are kept; repeated exports
+   receive numbered filenames. In MSFS Settings → Controls, select the same
+   device and matching profile type, open its cogwheel and import each XML.
+   Select one General preset and one aircraft preset together. Presets of the
+   same type are alternatives. Set aircraft/default assignment in MSFS and test
+   in flight. Tools → **Export current profile XML** exports just the profile being edited.
 
 See [Microsoft's import/export instructions](https://flightsimulator.zendesk.com/hc/en-us/articles/21862909046428-How-to-Export-and-Import-your-controller-profiles).
 
@@ -68,12 +74,16 @@ controls; it does not replay timed gameplay macros.
 
 ## Working copies, profiles and names
 
-Edits are saved to local working copies every three seconds and before switching
-profiles. Tools → **Resume local working copy** opens them. These are separate
-from exported XML and simulator saves. Exports use a file picker; saving into
+The entire setup is saved to a local working copy every three seconds and before
+switching layers or opening another setup. Startup restores the most recent
+setup matching the controller. Tools → **Resume local working copy** opens other
+setups and older single-profile drafts. Reopening an older saved setup keeps the
+newer edits as another working copy. Undo history is retained while switching
+in the current session; saved setup files preserve XML and names, not Undo history.
+Save setup and exported XML remain separate from simulator saves. Saving into
 the managed Store cloud-save folder is blocked.
 
-**Saved** reads profile XML copies from the Microsoft Store WGS folder, without
+**MSFS presets** reads profile XML copies from the Microsoft Store WGS folder, without
 modifying them. Copies supply real input IDs, device identity and extra actions.
 When references exist, keyboard/mouse profiles enable native Windows capture;
 XInput references enable connected XInput gamepads. Open XML can supply exported
@@ -83,11 +93,11 @@ Names are aliases tied to the controller, without replacing MSFS's internal
 names/IDs. They persist locally and travel with exports in an adjacent
 `.studio.json` sidecar. Keep it alongside XML when sharing with this app; MSFS
 reads only XML. App data lives in `%LOCALAPPDATA%/MSFSInputStudio`:
-`controller_labels.json`, `learned_catalogue.json`, `drafts/` and `error.log`.
+`controller_labels.json`, `learned_catalogue.json`, `setups/`, `drafts/` and `error.log`.
 
-Changing the live controller keeps the profile's identity. **Use for this
-profile** explicitly transfers between controllers of the same input family;
-review every assignment. Create a new profile to switch between keyboard,
+Changing the live controller keeps the setup's identity. **Use for setup** copies
+all layers to a controller of the same input family and retains the original;
+review every assignment. Create a new setup to switch between keyboard,
 mouse, gamepad and joystick, which use different input-ID formats.
 
 ## Settings and developer tools
@@ -136,12 +146,16 @@ Native profiles have multiple top-level elements. The parser's internal wrapper
 is removed on export. Unknown XML, comments, chords, secondary slots, aircraft
 metadata and overrides are preserved semantically; whitespace can change.
 SDK DefaultInput files retain their format and are not asserted to be native
-Controls-menu imports.
+Controls-menu imports. General and aircraft layers remain separate native XML
+files because disallowed action contexts can be ignored by the simulator.
+Read [the documentation review](MSFS_DOCUMENTATION_REVIEW.md) for the rules used
+in this pass and the remaining gaps. Conflict checks remain within each profile
+and context; they do not establish runtime precedence across every active layer.
 
 ## Build and verify
 
 Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` installs pinned tools,
-runs tests, builds a windowed one-file executable into `dist/v0.2.3` and creates
+runs tests, builds a windowed one-file executable into `dist/v0.3.0` and creates
 a source archive there. Intermediate files go to LocalAppData to avoid OneDrive
 locks. The source archive includes the public fixtures; a fresh Git checkout
 needs these retrieved separately:
@@ -159,32 +173,38 @@ Private Store profiles and working copies are not packaged.
 
 Validation:
 
-- 45 automated tests, including semantic round trips across all 48 public
+- 56 automated tests, including semantic round trips across all 48 public
   fixtures, per-family identity/conflicts, numbered axes, SDK data, XInput
   translation, read-only scans and working-copy preservation.
 - 20 actual Tk controller/UI workflow checks and seven keyboard/mouse checks,
   with simulated press/motion streams. Slow chords, held switches, retry, Escape,
   navigation, labels, batch undo, working-copy recovery and export are exercised.
-- 14 Saved/flaps workflow checks cover background loading, failure/retry,
+- 14 MSFS-presets/flaps workflow checks cover background loading, failure/retry,
   close/reopen/cancellation, cached counts, large-profile opening, profile-type
-  guidance, preservation and Undo/Redo. A simulated flaps-axis recording is
+  layer switching and preservation. A simulated flaps-axis recording is
   verified against the connected controller's real Windows inputs.
 - Eight camera workflow checks reproduce hidden controls, reveal all 470 known
   camera/view entries, preserve filters and airplane bindings, and record a
   simulated camera button binding in a separate General profile.
+- 16 controller-setup workflow checks exercise General/Airplane/Helicopter
+  switching, independent histories/tuning, combined binding display, input
+  search/Follow across layers, portable save/reopen, preservation of newer edits,
+  complete export, alternate presets, startup recovery and mixed-layer guided
+  recording. Save/export buttons are checked at the minimum 1120×680 window size.
 - Windows enumerates the connected PowerA FlightDeck's seven axes and 27 buttons.
   Keyboard/mouse readers initialize. Physical manipulation and a connected
   native XInput device have not been tested.
 - Screenshots inspected at regular/smaller sizes. The full test window displays
   all seven axis scales and 27 button lights; smaller panels scroll.
-- Packaged startup and embedded-resource loading checked outside the source
-  directory.
+- Source startup and resource loading are checked outside the source directory.
+  See release notes for the current executable's launch verification.
 
 `tools/qa_ui.py` and `tools/qa_workflow.py` use Pillow for development screenshots.
 `tools/qa_system_workflow.py` needs local keyboard/mouse reference profiles.
 `tools/qa_saved_workflow.py` reproduces Saved and flaps setup, using Pillow
 and the connected controller; it also reads local Store profiles when present.
 `tools/qa_camera_workflow.py` checks camera discovery, filter guidance and capture.
+`tools/qa_setup_workflow.py` exercises the complete controller setup workflow.
 Pillow is not needed to build or run the app.
 
 ```powershell

@@ -12,7 +12,7 @@ def main():
     dist = root / 'dist' / ('v' + __version__)
     dist.mkdir(parents=True, exist_ok=True)
     files = [root / name for name in ('msfs_input_studio.py', 'build.bat', 'requirements.txt',
-             'README.md', 'FEATURE_MATRIX.md', 'RELEASE_NOTES.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', '.gitignore')]
+             'README.md', 'FEATURE_MATRIX.md', 'MSFS_DOCUMENTATION_REVIEW.md', 'RELEASE_NOTES.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', '.gitignore')]
     for name in ('msfs_config', 'tests', 'tools', 'data', 'research/community-profiles/profiles'):
         files.extend(path for path in (root / name).rglob('*') if path.is_file() and '__pycache__' not in path.parts)
     target = dist / 'MSFSInputStudio-source.zip'

@@ -31,12 +31,21 @@ def main():
         root = tk.Tk()
         app = App(root, user_library=False)
         def finish():
+            kept = False
+            if app.profile:
+                initial = app.profile.to_text()
+                original = app.setup.active_id
+                category = app.profile.category
+                app.use_profile_type('AIRPLANE' if category == 'GENERAL' else 'GENERAL')
+                app.use_profile_type(category)
+                kept = app.setup.active_id == original and app.profile.to_text() == initial
             result = {'version': __version__, 'actions': len(app.catalogue.actions), 'rows': len(app.tree.get_children()),
                       'controller': app.device_var.get(), 'controller_open': app.controller is not None,
                       'objects': len(app.controller.objects) if app.controller else 0,
                       'profile_created': app.profile is not None, 'status': app.status.get(),
                       'recording_state': app.capture_title.get(), 'dashboard': bool(app.dashboard),
-                      'axis_names': app.profile.axis_names() if app.profile else []}
+                      'axis_names': app.profile.axis_names() if app.profile else [],
+                      'setup_layers': len(app.setup.layers) if app.setup else 0, 'setup_switch_keeps_edits': kept}
             Path(args.smoke_test).write_text(json.dumps(result, indent=2), encoding='utf-8')
             app.saved_text = app.profile.to_text() if app.profile else None
             app.close()

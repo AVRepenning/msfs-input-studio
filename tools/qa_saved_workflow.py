@@ -55,7 +55,7 @@ def main():
         assert app.profile.category == 'GENERAL'
         assert app.profile_hint.winfo_ismapped()
         assert 'Airplane or Helicopter' in app.profile_hint_text.cget('text')
-        assert app.profile_hint_button.cget('text') == 'Use Airplane profile'
+        assert app.profile_hint_button.cget('text') == 'Edit Airplane controls'
         capture_window(root, output / 'flaps-profile-guidance.png')
         checks.append('General profile explains disabled flaps bindings and offers a matching profile')
         app.profile_hint_button.invoke()
@@ -68,11 +68,14 @@ def main():
         get_input = next(button for slot, label, button in app.binding_buttons if slot == 'Primary' and label == 'Get Input')
         assert not get_input.instate(['disabled'])
         checks.append('One-click type switch keeps name, controller, tuning and flaps selection')
-        app.undo()
-        assert app.profile.category == 'GENERAL' and get_input.instate(['disabled'])
-        app.redo()
+        app.use_profile_type('GENERAL')
+        assert app.profile.category == 'GENERAL'
+        app.selected = ('AIRCRAFT', 'KEY_AXIS_FLAPS_SET')
+        app.show_action()
+        assert get_input.instate(['disabled'])
+        app.use_profile_type('AIRPLANE', preserve_browse=True)
         assert app.profile.category == 'AIRPLANE' and not get_input.instate(['disabled'])
-        checks.append('Profile type switch supports Undo and Redo')
+        checks.append('Profile type switch preserves both General and Airplane layers')
         baseline = {obj.offset: 0.0 if obj.kind == 'axis' else False if obj.kind == 'button' else -1 for obj in reader.objects}
         axis = next(obj for obj in reader.objects if obj.kind == 'axis')
         with patch.object(reader, 'read', return_value=baseline), patch('msfs_config.app.time.monotonic', return_value=100):
@@ -91,12 +94,11 @@ def main():
         app.type_var.set('Helicopter controls')
         app.category_changed()
         root.update()
-        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
+        assert app.profile.category == 'HELICOPTER'
+        assert not any(isinstance(child, tk.Toplevel) for child in root.winfo_children())
+        app.use_profile_type('AIRPLANE')
         assert app.profile.to_text() == original
-        assert app.type_var.get() == 'Airplane controls'
-        assert any(isinstance(widget, ttk.Combobox) and widget.get() == 'Helicopter controls' for widget in widgets(dialog))
-        dialog.destroy()
-        checks.append('Changing an existing profile opens a separate matching profile dialog; cancel preserves it')
+        checks.append('Helicopter switching keeps the existing airplane bindings without a New dialog')
 
         # Delay a real read-only Store scan to verify window responsiveness during I/O.
         release_scan = threading.Event()
@@ -105,7 +107,7 @@ def main():
             release_scan.wait(2)
             return scan_profiles(cancel_event=cancel_event)
         with patch('msfs_config.local_profiles.scan_profiles', side_effect=delayed_scan):
-            saved = next(widget for widget in widgets(root) if isinstance(widget, ttk.Button) and widget.cget('text') == 'Saved')
+            saved = next(widget for widget in widgets(root) if isinstance(widget, ttk.Button) and widget.cget('text') == 'MSFS presets')
             start = time.perf_counter()
             saved.invoke()
             opening_seconds = time.perf_counter() - start
@@ -158,16 +160,15 @@ def main():
             expected = largest['profile'].to_text()
             opener = next(widget for widget in widgets(window) if isinstance(widget, ttk.Button) and widget.cget('text') == 'Open selected copy')
             start = time.perf_counter()
-            def refresh_during_prompt():
-                app.saved_profiles.reverse()
-                app.saved_browser_refresh()
-                return True
-            with patch.object(app, 'can_discard', side_effect=refresh_during_prompt):
+            previous_setup = app.setup
+            previous_xml = app.profile.to_text()
+            with patch.object(app, 'can_discard', side_effect=AssertionError('Read-only import must keep edits without a discard prompt')):
                 opener.invoke()
             assert app.profile.to_text() == expected and app.profile is not largest['profile']
             assert time.perf_counter() - start < 2
             checks.append('The largest real Store profile opens promptly as a separate lossless copy')
-            checks.append('A refresh during the export prompt preserves the originally chosen saved profile')
+            assert any(layer.profile.to_text() == previous_xml for layer in previous_setup.layers)
+            checks.append('Opening a saved profile keeps previous edits without an export/discard prompt')
         started, finished = threading.Event(), threading.Event()
         def cancellable_scan(cancel_event=None):
             started.set()
@@ -179,7 +180,8 @@ def main():
             app.scan_saved_profiles(quiet=True)
             pump_until(started.is_set)
             app.saved_text = app.profile.to_text()
-            app.close()
+            with patch.object(app, 'can_discard', return_value=True):
+                app.close()
             assert finished.wait(1)
         checks.append('Closing during a background scan cancels work without callbacks into a destroyed window')
         assert not errors, errors
@@ -192,7 +194,8 @@ def main():
         app.saved_text = app.profile.to_text() if app.profile else None
         try:
             if root.winfo_exists():
-                app.close()
+                with patch.object(app, 'can_discard', return_value=True):
+                    app.close()
         except tk.TclError:
             pass
 

@@ -127,7 +127,8 @@ def finish(root, app, devices, rows):
                'screenshot': str(screenshot)}
     Path('research/ui-qa.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
     app.saved_text = app.profile.to_text()
-    app.close()
+    with patch.object(app, 'can_discard', return_value=True):
+        app.close()
     print(json.dumps(results, indent=2))
 
 

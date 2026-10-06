@@ -9,6 +9,7 @@ import time
 import threading
 import uuid
 import zlib
+import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -18,6 +19,7 @@ from .devices import DirectInput, changed_inputs
 from .locations import simulator_locations
 from .labels import ControllerLabels
 from .drafts import DraftStore
+from .setups import ControllerSetup, SetupStore, controller_key, category_layer
 from .dashboard import ControllerDashboard
 from .widgets import ScrollPage
 from .conflicts import binding_conflicts
@@ -39,6 +41,10 @@ class App:
         self.catalogue = Catalogue(storage=user_library)
         self.labels = ControllerLabels(storage=user_library)
         self.profile = None
+        self.setup = None
+        self.setups = {}
+        self.setup_store = SetupStore(storage=user_library)
+        self.layer_choices = {}
         self.path = None
         self.saved_text = None
         self.history, self.future = [], []
@@ -87,7 +93,7 @@ class App:
         self.drafts = DraftStore(storage=user_library)
         self.draft_session = str(uuid.uuid4())
         self.last_draft = None
-        self.view_category = tk.StringVar(value='Current profile')
+        self.view_category = tk.StringVar(value='All controls')
         self.action_group = tk.StringVar(value='All groups')
         self.follow_input = tk.BooleanVar()
         self.unbound_only = tk.BooleanVar()
@@ -126,7 +132,7 @@ class App:
             var.trace_add('write', self.schedule_list)
         self.name_var.trace_add('write', self.rename_profile)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
-        for sequence, command in [('<Control-o>', self.open_profile), ('<Control-s>', self.save_profile),
+        for sequence, command in [('<Control-o>', self.open_setup), ('<Control-s>', self.save_setup),
                                   ('<Control-z>', self.undo), ('<Control-y>', self.redo)]:
             self.root.bind(sequence, lambda event, cmd=command: self.shortcut(cmd))
         self.root.bind('<Escape>', self.escape)
@@ -175,7 +181,7 @@ class App:
         self.device_combo.pack(side='left')
         self.device_combo.bind('<<ComboboxSelected>>', self.select_device)
         ttk.Button(device_row, text='Refresh', command=self.refresh_devices).pack(side='left', padx=6)
-        ttk.Button(device_row, text='Use for this profile', command=self.retarget).pack(side='left')
+        ttk.Button(device_row, text='Use for setup', command=self.retarget).pack(side='left')
         self.device_summary = ttk.Label(device_row, text='Reading Windows controllers…', style='Muted.TLabel')
         self.device_summary.pack(side='left', padx=12)
 
@@ -188,11 +194,14 @@ class App:
         self.category_combo = ttk.Combobox(toolbar, textvariable=self.type_var, values=list(CATEGORIES), state='readonly', width=20)
         self.category_combo.pack(side='left', padx=8)
         self.category_combo.bind('<<ComboboxSelected>>', self.category_changed)
-        for label, command in [('New', self.new_profile_dialog), ('Open XML', self.open_profile),
-                               ('Duplicate', self.duplicate), ('Undo', self.undo), ('Redo', self.redo)]:
-            ttk.Button(toolbar, text=label, command=command).pack(side='left', padx=2)
-        ttk.Button(toolbar, text='Export XML', style='Accent.TButton', command=self.save_profile).pack(side='right')
-        ttk.Button(toolbar, text='Saved', command=self.saved_profile_browser).pack(side='left', padx=5)
+        for label, command in [('New setup', self.new_profile_dialog), ('Open XML', self.open_profile),
+                               ('Save setup', self.save_setup), ('Undo', self.undo), ('Redo', self.redo)]:
+            button = ttk.Button(toolbar, text=label, command=command)
+            if label in ('Undo', 'Redo'):
+                button.configure(width=5)
+            button.pack(side='left', padx=2)
+        ttk.Button(toolbar, text='Export setup', style='Accent.TButton', command=self.export_setup).pack(side='right')
+        ttk.Button(toolbar, text='MSFS presets', command=self.saved_profile_browser).pack(side='left', padx=5)
 
         self.capture_panel = tk.Frame(shell, bg='#e4eaf1', padx=12, pady=8)
         self.capture_panel.pack(fill='x', pady=(0, 12))
@@ -256,8 +265,8 @@ class App:
         ttk.Button(recording_row, text='Edit selected…', command=self.selected_actions_menu).pack(side='right')
         table = ttk.Frame(left)
         table.pack(fill='both', expand=True)
-        self.tree = ttk.Treeview(table, columns=('action', 'context', 'binding'), show='headings', selectmode='extended')
-        for column, title, width in [('action', 'Action', 290), ('context', 'Context', 145), ('binding', 'Binding', 175)]:
+        self.tree = ttk.Treeview(table, columns=('action', 'context', 'binding', 'scope'), show='headings', selectmode='extended')
+        for column, title, width in [('action', 'Action', 250), ('context', 'Context', 110), ('binding', 'Binding', 150), ('scope', 'Stored in', 110)]:
             self.tree.heading(column, text=title, command=lambda c=column: self.sort(c))
             self.tree.column(column, width=width, minwidth=70)
         scroll = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
@@ -542,6 +551,176 @@ class App:
         refresh()
         return window, dashboard
 
+    def ensure_setup(self):
+        if self.profile and (self.setup is None or controller_key(self.setup.active.profile) != controller_key(self.profile)):
+            self.setup = ControllerSetup(self.profile)
+            self.setups[self.setup.id] = self.setup
+        if self.setup and self.profile:
+            self.setup.active.profile = self.profile
+
+    def browse_state(self):
+        return {name: getattr(self, name).get() for name in
+                ('search_var', 'context_var', 'view_category', 'action_group', 'bound_only',
+                 'unbound_only', 'conflicts_only', 'axis_var', 'axis_scope')}
+
+    def stash_layer(self):
+        if not self.profile:
+            return
+        self.ensure_setup()
+        self.setup.active.editor = {name: getattr(self, name) for name in
+            ('path', 'saved_text', 'history', 'future', 'history_labels', 'future_labels',
+             'draft_session', 'last_draft', 'selected', 'input_filter', 'input_filter_names')}
+        self.setup.active.editor['browse'] = self.browse_state()
+
+    def activate_layer(self, layer, preserve_browse=False):
+        previous_view, previous_selection = self.browse_state(), self.selected
+        self.cancel_capture()
+        self.setup.active_id = layer.id
+        self.profile = layer.profile
+        state = layer.editor
+        self.path, self.saved_text = state.get('path'), state.get('saved_text', self.profile.to_text())
+        self.history, self.future = state.get('history', []), state.get('future', [])
+        self.history_labels, self.future_labels = state.get('history_labels', []), state.get('future_labels', [])
+        self.draft_session, self.last_draft = state.get('draft_session', str(uuid.uuid4())), state.get('last_draft')
+        self.selected = previous_selection if preserve_browse else state.get('selected')
+        self.programmatic_selection = None
+        self.input_filter = state.get('input_filter') if not preserve_browse else None
+        self.input_filter_names = state.get('input_filter_names') if not preserve_browse else None
+        self.renaming = False
+        self.loading = True
+        self.clear_browse_filters()
+        for name, value in (previous_view if preserve_browse else state.get('browse', {})).items():
+            getattr(self, name).set(value)
+        self.loading = False
+        if self.selected not in self.catalogue.actions:
+            self.selected = None
+        self.sync_profile()
+        if not self.selected:
+            self.action_title.configure(text='Select a control')
+            self.action_id.configure(text='Choose a control. General and aircraft layers are kept together in this setup.')
+            for slot in self.slot_vars:
+                self.slot_keys[slot] = []
+                self.slot_vars[slot].set('Unbound')
+                self.input_vars[slot].set('')
+        self.update_binding_buttons()
+
+    def adopt_profile(self, profile, path=None, fresh_setup=False):
+        self.save_setup_cache()
+        if fresh_setup or self.setup is None or controller_key(self.setup.active.profile) != controller_key(profile):
+            existing = None if fresh_setup else next((setup for setup in reversed(list(self.setups.values()))
+                         if controller_key(setup.active.profile) == controller_key(profile)), None)
+            self.setup = existing or ControllerSetup(profile)
+            self.setups[self.setup.id] = self.setup
+            layer = self.setup.add(profile) if existing else self.setup.active
+        else:
+            layer = self.setup.add(profile)
+        layer.editor = {'path': Path(path) if path else None, 'saved_text': profile.to_text()}
+        self.activate_layer(layer)
+        self.save_setup_cache()
+
+    def update_setup_controls(self):
+        self.ensure_setup()
+        self.layer_choices = {label: ('category', value) for label, value in CATEGORIES.items()}
+        selected_label = self.type_var.get()
+        if self.setup:
+            for layer in self.setup.layers:
+                profile = layer.profile
+                label = next((label for label, value in CATEGORIES.items() if value == profile.category), profile.category + ' controls')
+                if not category_layer(profile) or self.setup.category(profile.category) is not layer or label not in CATEGORIES:
+                    label = ('Specific aircraft' if not category_layer(profile) and profile.format == 'native' else label)
+                    label += f' — {profile.name} [{layer.id[:4]}]'
+                    self.layer_choices[label] = ('layer', layer.id)
+                if layer.id == self.setup.active_id:
+                    selected_label = label
+        self.category_combo.configure(values=list(self.layer_choices))
+        self.type_var.set(selected_label)
+
+    def setup_labels(self):
+        if not self.profile:
+            return {}
+        guid = self.label_guid(self.profile.device.attrib).lower()
+        return {guid: self.labels.devices.get(guid, {})}
+
+    def save_setup_cache(self):
+        if self.setup:
+            self.stash_layer()
+            self.setup_store.save(self.setup, self.setup_labels())
+
+    def save_setup(self):
+        if not self.profile:
+            return False
+        self.stash_layer()
+        path = filedialog.asksaveasfilename(title='Save complete controller setup', defaultextension='.msfssetup',
+                    initialfile='Controller.msfssetup', filetypes=[('MSFS Input Studio setup', '*.msfssetup')])
+        if not path:
+            return False
+        try:
+            from .local_profiles import is_managed_save
+            if is_managed_save(path):
+                raise ValueError('Save the setup outside the simulator’s managed saves.')
+            self.setup.save(path, self.setup_labels())
+            for layer in self.setup.layers:
+                layer.editor['saved_text'] = layer.profile.to_text()
+            self.saved_text = self.profile.to_text()
+            self.feedback('SETUP SAVED', f'All {len(self.setup.layers)} profiles saved together in {Path(path).name}. Export setup creates the XML files for MSFS.', 'success')
+            return True
+        except (OSError, ValueError) as exc:
+            self.error(exc)
+            return False
+
+    def open_setup(self):
+        path = filedialog.askopenfilename(title='Open controller setup', filetypes=[('MSFS Input Studio setup', '*.msfssetup')])
+        if not path:
+            return
+        try:
+            setup, labels = ControllerSetup.load(path)
+            self.prepare_setup_restore(setup)
+            self.labels.merge(labels)
+            self.labels.save()
+            for layer in setup.layers:
+                self.catalogue.learn(layer.profile)
+            self.catalogue.save_library()
+            self.setup = setup
+            self.setups[setup.id] = setup
+            self.activate_layer(setup.active)
+            self.select_profile_controller()
+            self.feedback('SETUP OPENED', f'{len(setup.layers)} profiles restored. Switch General / Airplane / Helicopter here; all edits stay in this setup.', 'success')
+        except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+            self.error(exc)
+
+    def prepare_setup_restore(self, setup):
+        self.save_setup_cache()
+        existing = self.setups.get(setup.id)
+        if existing:
+            self.setups.pop(existing.id)
+            existing.id = str(uuid.uuid4())
+            self.setups[existing.id] = existing
+            guid = self.label_guid(existing.active.profile.device.attrib).lower()
+            self.setup_store.save(existing, {guid: self.labels.devices.get(guid, {})})
+
+    def export_setup(self):
+        if not self.profile:
+            return
+        self.cancel_capture()
+        self.stash_layer()
+        folder = filedialog.askdirectory(title='Choose a NEW folder for the setup XML files')
+        if not folder:
+            return
+        try:
+            files, guide = self.setup.export(folder)
+            labels = self.setup_labels()
+            for layer, path in zip(self.setup.layers, files):
+                if any(labels.values()):
+                    path.with_suffix('.studio.json').write_text(json.dumps({'controller_labels': labels}, indent=2), encoding='utf-8')
+                layer.editor['saved_text'], layer.editor['path'] = layer.profile.to_text(), path
+            self.saved_text = self.profile.to_text()
+            self.path = files[self.setup.layers.index(self.setup.active)]
+            self.save_setup_cache()
+            self.feedback('SETUP EXPORTED', f'{len(files)} XML profiles exported to {folder}. {guide.name} tells you where to import each one. Select General and aircraft presets together in MSFS.', 'success')
+            return files
+        except (OSError, ValueError) as exc:
+            self.error(exc)
+
     def checkpoint(self, description='Edit profile'):
         if self.profile:
             self.history.append(self.snapshot())
@@ -556,8 +735,9 @@ class App:
     def autosave_draft(self):
         try:
             self.save_draft()
+            self.save_setup_cache()
         except (OSError, ValueError) as exc:
-            self.status.set(f'Could not save the local working copy: {exc}. Export XML to save your work.')
+            self.status.set(f'Could not save the local working copy: {exc}. Save setup to keep your work.')
         finally:
             self.root.after(3000, self.autosave_draft)
 
@@ -571,42 +751,57 @@ class App:
 
     def draft_browser(self):
         rows = self.drafts.entries()
+        setup_rows = self.setup_store.entries()
         window = tk.Toplevel(self.root)
         window.title('Local working copies')
         window.geometry('800x490')
         frame = ttk.Frame(window, padding=18)
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='Resume a profile you were working on', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(frame, text='Edits are saved here automatically every three seconds. These are local working copies; Export XML creates a file to import in MSFS.', wraplength=740).pack(anchor='w', pady=10)
+        ttk.Label(frame, text='All setup profiles are saved here automatically every three seconds. Save setup creates one portable file; Export setup creates the XML files for MSFS.', wraplength=740).pack(anchor='w', pady=10)
         listing = tk.Listbox(frame, height=15, exportselection=False)
         listing.pack(fill='both', expand=True)
+        for row in setup_rows:
+            setup = row['setup']
+            listing.insert('end', f'Setup · {setup.name} · {len(setup.layers)} profiles · {setup.active.profile.device.get("DeviceName")}')
         for row in rows:
             profile = row['profile']
             listing.insert('end', f'{profile.name} · {profile.category} · {profile.device.get("DeviceName")} · {row["updated"][:16].replace("T", " ")} UTC')
-        if rows:
+        if rows or setup_rows:
             listing.selection_set(0)
         else:
             listing.insert('end', 'No working copies yet. Record or edit a profile to create one.')
         def open_copy(_=None):
             selection = listing.curselection()
-            if not rows or not selection or not self.can_discard():
+            if not (rows or setup_rows) or not selection:
                 return
-            row = rows[selection[0]]
+            if selection[0] < len(setup_rows):
+                row = setup_rows[selection[0]]
+                self.prepare_setup_restore(row['setup'])
+                self.setup = row['setup']
+                self.setups[self.setup.id] = self.setup
+                self.labels.merge(row['labels'])
+                self.labels.save()
+                for layer in self.setup.layers:
+                    self.catalogue.learn(layer.profile)
+                self.catalogue.save_library()
+                self.activate_layer(self.setup.active)
+                self.select_profile_controller()
+                self.feedback('WORKING COPY OPENED', f'Complete setup restored: {len(self.setup.layers)} profiles. Switch layers to continue editing.', 'success')
+                window.destroy()
+                return
+            row = rows[selection[0] - len(setup_rows)]
             self.cancel_capture()
-            self.profile = Profile.from_text(row['profile'].to_text())
-            self.catalogue.learn(self.profile)
+            self.catalogue.learn(row['profile'])
             self.catalogue.save_library()
             self.labels.merge(row['labels'])
             self.labels.save()
-            self.path, self.saved_text = None, self.profile.to_text()
+            self.adopt_profile(Profile.from_text(row['profile'].to_text()))
             self.draft_session, self.last_draft = row['id'], self.profile.to_text()
-            self.history, self.future, self.history_labels, self.future_labels = [], [], [], []
-            self.selected = None
-            self.clear_browse_filters()
             self.sync_profile()
             self.refresh_devices()
             self.select_profile_controller()
-            self.feedback('WORKING COPY OPENED', 'Continue editing, then Export XML and import it through MSFS Controls.', 'success')
+            self.feedback('WORKING COPY OPENED', 'Continue editing, then Save setup or Export setup for MSFS Controls.', 'success')
             window.destroy()
         listing.bind('<Double-1>', open_copy)
         ttk.Button(frame, text='Open selected working copy', command=open_copy, style='Accent.TButton').pack(fill='x', pady=(12, 0))
@@ -618,14 +813,15 @@ class App:
     def can_discard(self):
         try:
             self.save_draft()
+            self.save_setup_cache()
         except (OSError, ValueError) as exc:
             self.status.set(f'Could not save the working copy: {exc}')
-        if not self.dirty():
+        if not self.dirty() and (not self.setup or not any(layer.profile.to_text() != layer.editor.get('saved_text', layer.profile.to_text()) for layer in self.setup.layers)):
             return True
-        result = messagebox.askyesnocancel('Unsaved profile', 'Export your changes before continuing?', parent=self.root)
+        result = messagebox.askyesnocancel('Unsaved controller setup', 'Save the complete controller setup before continuing? All profile layers are also kept in local working copies.', parent=self.root)
         if result is None:
             return False
-        return self.save_profile() if result else True
+        return self.save_setup() if result else True
 
     def refresh_devices(self):
         previous = self.device_var.get()
@@ -688,9 +884,20 @@ class App:
                 self.monitor.insert('', 'end', iid=str(obj.offset), values=(label, '—', str(pair[1]) if pair else 'Needs reference'))
             self.update_input_choices()
             if self.profile is None:
-                self.new_profile()
+                matching = next((row for row in self.setup_store.entries() if
+                    controller_key(row['setup'].active.profile) == controller_key(Profile.new('Device', device.attributes))), None)
+                if matching:
+                    self.setup = matching['setup']
+                    self.setups[self.setup.id] = self.setup
+                    self.labels.merge(matching['labels'])
+                    for layer in self.setup.layers:
+                        self.catalogue.learn(layer.profile)
+                    self.activate_layer(self.setup.active)
+                    self.feedback('SETUP RECOVERED', f'{len(self.setup.layers)} profiles restored for this controller. Switch layers to continue; Export setup creates the MSFS files.', 'success')
+                else:
+                    self.new_profile()
             elif not self.controller_matches():
-                self.status.set('Live controller differs from the profile. Use for this profile to transfer it explicitly.')
+                self.status.set('Live controller differs from this setup. Use for setup copies all layers to it.')
             self.update_binding_buttons()
         except Exception as exc:
             self.device_summary.configure(text='Cannot read controller')
@@ -767,17 +974,17 @@ class App:
 
     def new_profile_dialog(self, preferred_category=None):
         window = tk.Toplevel(self.root)
-        window.title('Create a profile')
+        window.title('Create a controller setup')
         window.transient(self.root)
         window.grab_set()
         frame = ttk.Frame(window, padding=22)
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='Choose what you want to configure', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(frame, text='MSFS uses General and aircraft profiles together on the same controller. Camera/menu controls go in General; flight controls go in Airplane or Helicopter. Choose which file to create. Your current edits are kept until you create it.', wraplength=450).pack(anchor='w', pady=10)
+        ttk.Label(frame, text='Create one setup for this controller. Start with General, Airplane or Helicopter, then switch between them here; each layer keeps its bindings. Camera and flight controls work together in MSFS. Your previous setup is kept in local working copies.', wraplength=450).pack(anchor='w', pady=10)
         name = tk.StringVar(value='My flight controls')
         category = tk.StringVar(value=next((label for label, value in CATEGORIES.items() if value == preferred_category),
                                           self.type_var.get() if self.type_var.get() in CATEGORIES else 'General controls'))
-        ttk.Label(frame, text='Profile name').pack(anchor='w')
+        ttk.Label(frame, text='Setup name').pack(anchor='w')
         entry = ttk.Entry(frame, textvariable=name)
         entry.pack(fill='x', pady=(4, 10))
         ttk.Combobox(frame, textvariable=category, values=list(CATEGORIES), state='readonly').pack(fill='x')
@@ -786,7 +993,7 @@ class App:
             self.new_profile(name.get(), CATEGORIES[category.get()])
             if self.profile is not previous:
                 window.destroy()
-        ttk.Button(frame, text='Create profile', command=create, style='Accent.TButton').pack(fill='x', pady=(15, 0))
+        ttk.Button(frame, text='Create setup', command=create, style='Accent.TButton').pack(fill='x', pady=(15, 0))
         entry.focus_set()
         entry.selection_range(0, 'end')
         window.bind('<Return>', lambda _: create())
@@ -796,12 +1003,11 @@ class App:
         if not device and not self.profile:
             self.error('Connect a Windows controller, then Refresh, or open an exported XML profile.')
             return
-        if not self.can_discard():
-            return
         identity = device.attributes if device else dict(self.profile.device.attrib)
         axes = [o.axis for o in device.objects if o.kind == 'axis'] if device else [a.get('AxisName') for a in self.profile.device.findall('Axes/Axis')]
-        self.profile = Profile.new((name or self.name_var.get()).strip() or 'My flight controls', identity,
-                                   category or CATEGORIES[self.type_var.get()], axes)
+        profile = Profile.new((name or self.name_var.get()).strip() or 'My flight controls', identity,
+                              category or (self.profile.category if self.profile else 'GENERAL'), axes)
+        self.adopt_profile(profile, fresh_setup=True)
         self.loading = True
         self.name_var.set(self.profile.name)
         self.type_var.set(next(label for label, value in CATEGORIES.items() if value == self.profile.category))
@@ -821,13 +1027,11 @@ class App:
             self.slot_vars[slot].set('Unbound')
         self.refresh_list()
         self.load_axis()
-        self.status.set('New profile. Choose a control, then click Get Input or choose a Windows input.')
+        self.status.set('New controller setup. Switch General / Airplane / Helicopter to configure its layers; Save setup keeps them together.')
         self.update_binding_buttons()
 
     def open_profile(self):
         self.cancel_capture()
-        if not self.can_discard():
-            return
         path = filedialog.askopenfilename(title='Open MSFS 2024 exported profile', filetypes=[('XML profiles', '*.xml'), ('All files', '*.*')])
         if not path:
             return
@@ -835,8 +1039,7 @@ class App:
             profile = Profile.load(path)
             self.catalogue.learn(profile)
             self.catalogue.save_library()
-            self.profile, self.path = profile, Path(path)
-            self.draft_session, self.last_draft = str(uuid.uuid4()), None
+            self.adopt_profile(profile, path)
             sidecar = self.path.with_suffix('.studio.json')
             if sidecar.is_file() and sidecar.stat().st_size < 1_000_000:
                 try:
@@ -844,9 +1047,6 @@ class App:
                     self.labels.save()
                 except (OSError, ValueError, TypeError) as exc:
                     self.status.set(f'Profile opened; could not load its input labels: {exc}')
-            self.saved_text = profile.to_text()
-            self.history, self.future = [], []
-            self.history_labels, self.future_labels = [], []
             self.sync_profile()
             self.update_input_choices()
             self.refresh_devices()
@@ -857,12 +1057,14 @@ class App:
             self.error(exc)
 
     def sync_profile(self):
+        self.ensure_setup()
         self.loading = True
         self.name_var.set(self.profile.name)
         self.type_var.set(next((label for label, value in CATEGORIES.items() if value == self.profile.category), self.profile.category + ' controls'))
         self.current_profile_category = self.profile.category
         self.loading = False
         self.category_combo.configure(state='readonly')
+        self.update_setup_controls()
         self.refresh_list()
         self.show_action()
         self.load_axis()
@@ -873,27 +1075,35 @@ class App:
             if not self.renaming:
                 self.checkpoint('Rename profile')
                 self.renaming = True
+            previous = self.profile.name
             self.profile.name = self.name_var.get()
+            if self.setup and len(self.setup.layers) == 1 and self.setup.name == previous:
+                self.setup.name = self.profile.name
 
     def category_changed(self, _=None):
-        chosen = CATEGORIES.get(self.type_var.get())
-        if self.profile:
-            self.type_var.set(next((label for label, value in CATEGORIES.items() if value == self.profile.category),
-                                   self.profile.category + ' controls'))
-        if chosen and (not self.profile or chosen != self.profile.category):
-            self.use_profile_type(chosen)
+        target = self.layer_choices.get(self.type_var.get())
+        if target and target[0] == 'layer':
+            self.stash_layer()
+            self.activate_layer(next(layer for layer in self.setup.layers if layer.id == target[1]))
+        elif target:
+            self.use_profile_type(target[1])
 
-    def use_profile_type(self, chosen):
-        if self.profile and self.profile.can_change_category():
-            self.cancel_capture()
-            self.checkpoint('Change profile type')
-            self.profile.change_empty_category(chosen)
-            self.sync_profile()
-            label = next(label for label, value in CATEGORIES.items() if value == chosen)
-            self.feedback('PROFILE TYPE UPDATED',
-                          f'{label}. Your profile name, controller and axis settings are kept. Select a control and click Get Input.', 'success')
-        else:
-            self.new_profile_dialog(chosen)
+    def use_profile_type(self, chosen, preserve_browse=False):
+        if not self.profile:
+            self.new_profile(category=chosen)
+            return
+        self.stash_layer()
+        try:
+            layer = self.setup.ensure_category(chosen)
+        except ValueError as exc:
+            self.update_setup_controls()
+            self.error(exc)
+            return
+        self.activate_layer(layer, preserve_browse)
+        self.save_setup_cache()
+        label = next(label for label, value in CATEGORIES.items() if value == chosen)
+        self.feedback('EDITING ' + label.upper(),
+                      f'{len(self.setup.layers)} profiles in this controller setup. All edits, names, bindings and Undo history are kept when you switch. General and aircraft profiles work together in MSFS.', 'success')
 
     def selected_profile_type(self):
         categories = self.catalogue.actions[self.selected]['categories'] if self.selected else []
@@ -902,31 +1112,25 @@ class App:
     def use_selected_profile_type(self):
         chosen = self.selected_profile_type()
         if chosen:
-            self.use_profile_type(chosen)
+            self.use_profile_type(chosen, preserve_browse=True)
 
     def duplicate(self):
         if not self.profile:
             return
-        try:
-            self.save_draft()
-        except (OSError, ValueError) as exc:
-            self.status.set(f'Could not save the original working copy: {exc}')
-        self.checkpoint('Duplicate profile')
-        self.draft_session, self.last_draft = str(uuid.uuid4()), None
-        self.profile.name = self.profile.name + ' copy'
-        self.path = None
-        self.sync_profile()
-        self.status.set('Duplicated. Export XML to save the copy as a new file.')
+        profile = Profile.from_text(self.profile.to_text())
+        profile.name += ' copy'
+        self.adopt_profile(profile)
+        self.feedback('PROFILE DUPLICATED', 'The original and its copy are both kept in this setup. Use the Editing selector to choose a preset.', 'success')
 
     def retarget(self):
         device = self.selected_device()
         if not self.profile or not device:
             return
         if device_family(self.profile.device.attrib) != device_family(device.attributes):
-            self.error('Keyboard, mouse, gamepad and joystick input IDs belong to different formats. Click New to create a profile for this device.')
+            self.error('Keyboard, mouse, gamepad and joystick input IDs belong to different formats. Click New setup to configure this device.')
             return
-        self.cancel_capture()
-        self.checkpoint('Transfer to controller')
+        self.save_setup_cache()
+        original_setup = self.setup
         original_guid = self.label_guid(self.profile.device.attrib).lower()
         inherited = self.labels.devices.get(original_guid, {})
         if inherited:
@@ -934,11 +1138,22 @@ class App:
             for name, label in inherited.items():
                 target.setdefault(name, label)
             self.labels.save()
-        self.profile.device.attrib.update(device.attributes)
-        self.update_input_choices()
-        self.refresh_list()
-        self.show_action()
-        self.status.set(f'Profile now targets {device.name}. Review every binding against its live inputs before importing.')
+        transferred, active = None, None
+        for layer in original_setup.layers:
+            profile = Profile.from_text(layer.profile.to_text())
+            profile.device.attrib.update(device.attributes)
+            if transferred is None:
+                transferred = ControllerSetup(profile, original_setup.name)
+                new_layer = transferred.active
+            else:
+                new_layer = transferred.add(profile)
+            if layer.id == original_setup.active_id:
+                active = new_layer
+        self.setup = transferred
+        self.setups[transferred.id] = transferred
+        self.activate_layer(active)
+        self.save_setup_cache()
+        self.feedback('SETUP COPIED TO CONTROLLER', f'All {len(transferred.layers)} profiles now target {device.name}. The original setup is kept. Review every binding against this controller before importing.', 'success')
 
     def undo(self):
         if self.profile and self.history:
@@ -979,6 +1194,15 @@ class App:
         bound = self.profile.actions() if self.profile else {}
         self.conflict_map = binding_conflicts(self.profile) if self.profile else {}
         conflicts = set(self.conflict_map)
+        layer_actions, layer_conflicts = {}, {}
+        if self.setup and self.profile.format == 'native':
+            self.ensure_setup()
+            for value in CATEGORIES.values():
+                layer = self.setup.category(value)
+                if layer and layer.profile is not self.profile:
+                    layer_actions[value] = layer.profile.actions()
+                    layer_conflicts[value] = binding_conflicts(layer.profile)
+        visible_conflicts = set()
         rows = []
         hidden_count, hidden_categories = 0, set()
         for identity, entry in self.catalogue.actions.items():
@@ -992,6 +1216,13 @@ class App:
             haystack = (' '.join([self.action_name(entry), entry['name'], entry['context'], group,
                                   entry.get('description', ''), entry.get('subcategory', '')])).casefold()
             action = bound.get(identity)
+            owner_category = category
+            owner_conflicts = conflicts
+            if self.profile and self.profile.format == 'native' and category not in entry['categories'] and action is None:
+                owner_category = next((value for value in CATEGORIES.values() if value in entry['categories']), category)
+                action = layer_actions.get(owner_category, {}).get(identity)
+                owner_conflicts = layer_conflicts.get(owner_category, {})
+                available = owner_category in entry['categories']
             names = [k.get('Information', '') for k in action.findall('./Primary/KEY')] if action is not None else []
             secondary = [k.get('Information', '') for k in action.findall('./Secondary/KEY')] if action is not None else []
             binding = ' + '.join(self.input_display(name) for name in names) + (' / ' + ' + '.join(self.input_display(name) for name in secondary) if secondary else '')
@@ -1001,7 +1232,7 @@ class App:
                 continue
             if self.unbound_only.get() and binding:
                 continue
-            if self.conflicts_only.get() and identity not in conflicts:
+            if self.conflicts_only.get() and identity not in owner_conflicts:
                 continue
             if self.input_filter is not None and action is not None:
                 slot_ids = [{str(k.text or '').strip() for k in action.findall(f'./{slot}/KEY')}
@@ -1030,16 +1261,21 @@ class App:
                 hidden_count += 1
                 hidden_categories.update(entry['categories'])
                 continue
-            rows.append((identity, self.action_name(entry), entry['context'], binding, available))
-        index = {'name': 1, 'action': 1, 'context': 2, 'binding': 3}.get(self.sort_column, 1)
+            scope = next((label.replace(' controls', '') for label, value in CATEGORIES.items() if value == owner_category), owner_category.title())
+            if self.profile and owner_category == category and not category_layer(self.profile) and self.profile.format == 'native':
+                scope = 'Specific aircraft'
+            if identity in owner_conflicts:
+                visible_conflicts.add(identity)
+            rows.append((identity, self.action_name(entry), entry['context'], binding, available, scope))
+        index = {'name': 1, 'action': 1, 'context': 2, 'binding': 3, 'scope': 5}.get(self.sort_column, 1)
         rows.sort(key=lambda r: (r[index].casefold(), r[0]), reverse=self.sort_reverse)
         self.tree.delete(*self.tree.get_children())
         self.row_ids = {}
-        for number, (identity, title, context, binding, available) in enumerate(rows):
+        for number, (identity, title, context, binding, available, scope) in enumerate(rows):
             row_id = str(number)
             self.row_ids[row_id] = identity
-            self.tree.insert('', 'end', iid=row_id, values=(title, context, binding or '—'),
-                             tags=('unavailable',) if not available else ('conflict',) if identity in conflicts else ('bound',) if binding else ())
+            self.tree.insert('', 'end', iid=row_id, values=(title, context, binding or '—', scope),
+                             tags=('unavailable',) if not available else ('conflict',) if identity in visible_conflicts else ('bound',) if binding else ())
             if self.selected == identity:
                 self.tree.selection_set(row_id)
         selected_row = next((row for row, identity in self.row_ids.items() if identity == self.selected), None)
@@ -1059,7 +1295,7 @@ class App:
                 self.slot_vars[slot].set('Unbound')
                 self.input_vars[slot].set('')
             self.update_binding_buttons()
-        self.count_label.configure(text=f'{len(rows):,} controls · {sum(bool(r[3]) for r in rows):,} bound · {len(conflicts)} possible conflicts · Ctrl/Shift selects several')
+        self.count_label.configure(text=f'{len(rows):,} controls · {sum(bool(r[3]) for r in rows):,} bound · {len(visible_conflicts)} possible conflicts · Ctrl/Shift selects several')
         self.group_combo.configure(values=['All groups'] + sorted({self.action_group_name(e) for e in self.catalogue.actions.values()}))
         self.empty_results.place_forget()
         self.show_other_profiles_button.pack_forget()
@@ -1107,7 +1343,7 @@ class App:
         self.search_var.set('')
         self.context_var.set('All contexts')
         self.action_group.set('All groups')
-        self.view_category.set('Current profile')
+        self.view_category.set('All controls')
         self.bound_only.set(False)
         self.unbound_only.set(False)
         self.conflicts_only.set(False)
@@ -1128,6 +1364,12 @@ class App:
             if not self.follow_input.get():
                 self.cancel_capture()
             self.selected = identity
+            if self.profile and self.profile.format == 'native' and self.profile.category not in self.catalogue.actions[identity]['categories'] and self.profile.action(*identity) is None:
+                chosen = self.selected_profile_type()
+                if chosen:
+                    self.use_profile_type(chosen, preserve_browse=True)
+                    self.programmatic_selection = identity
+                    return
             self.show_action()
 
     def show_action(self):
@@ -1136,7 +1378,7 @@ class App:
             return
         context, name = self.selected
         self.action_title.configure(text=self.action_name(self.catalogue.actions[self.selected]))
-        self.action_id.configure(text=f'{name}\n{context}')
+        self.action_id.configure(text=f'{name}\n{context} · {self.profile.category.title() if self.profile else "Choose a profile"}')
         action = self.profile.action(context, name) if self.profile else None
         entry = self.catalogue.actions[self.selected]
         attrs = action.attrib if action is not None else entry['attributes']
@@ -1173,12 +1415,11 @@ class App:
                                         if value in self.catalogue.actions[self.selected]['categories'])
                 self.profile_hint_text.configure(text=f'This control is stored in {available} profiles, rather than the {current} file you are editing. '
                                                      'MSFS uses General and aircraft profiles together on this controller, so camera and flight controls both work.')
-                blank = self.profile and self.profile.can_change_category()
-                self.profile_hint_button.configure(text=('Use ' if blank else 'New ') + label.replace(' controls', '') + ' profile')
+                self.profile_hint_button.configure(text='Edit ' + label.replace(' controls', '') + ' controls')
                 self.profile_hint_button.pack(anchor='w', pady=(6, 0))
                 self.profile_hint.pack(before=self.tabs, fill='x')
         elif allowed and not matching_device:
-            self.profile_hint_text.configure(text='Recording is unavailable because the selected controller does not match this profile. Select its controller, or click Use for this profile. Verified inputs can also be chosen below.')
+            self.profile_hint_text.configure(text='Recording is unavailable because the selected controller differs from this setup. Select its controller, or click Use for setup to copy every layer to it. Verified inputs can also be chosen below.')
             self.profile_hint_button.pack_forget()
             self.profile_hint.pack(before=self.tabs, fill='x')
         for slot, label, button in self.binding_buttons:
@@ -1222,7 +1463,7 @@ class App:
             action.set('Flag', str(flag & ~8 if modifiers else flag))
         self.show_action()
         self.refresh_list()
-        self.status.set(f'{slot} binding updated. Export XML when ready.')
+        self.status.set(f'{slot} binding updated. Save setup keeps your work; Export setup prepares it for MSFS.')
 
     def manual_binding(self, slot, add=False):
         self.cancel_capture()
@@ -1364,9 +1605,14 @@ class App:
     def tools_menu(self):
         menu = tk.Menu(self.root, tearoff=False)
         for title, command in [('Setup walkthrough', self.setup_walkthrough),
+                                ('Save complete controller setup', self.save_setup),
+                                ('Open controller setup', self.open_setup),
+                                ('Export all setup profiles', self.export_setup),
+                                ('Export current profile XML', self.save_profile),
+                                ('Duplicate current preset', self.duplicate),
                                 ('Resume local working copy', self.draft_browser),
                                 ('Device Keys / input ID reference', self.device_keys),
-                                ('Saved MSFS profiles (open a copy)', self.saved_profile_browser),
+                                ('MSFS presets (open a copy)', self.saved_profile_browser),
                                 ('Import control definitions / reference profiles', self.import_definitions),
                                 ('Profile / device metadata', self.edit_metadata),
                                 ('Undo history', self.undo_history),
@@ -1482,7 +1728,7 @@ class App:
         frame = ttk.Frame(window, padding=18)
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='Start from your existing simulator profiles', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(frame, text='Open a copy, make changes, then Export XML and import it in MSFS. This browser reads local Store saves; it does not write to cloud storage.', wraplength=800).pack(anchor='w', pady=10)
+        ttk.Label(frame, text='Open a copy to add it to this controller setup. Export setup prepares its XML files for MSFS. This browser reads local Store saves without changing them.', wraplength=800).pack(anchor='w', pady=10)
         search = tk.StringVar()
         search_row = ttk.Frame(frame)
         search_row.pack(fill='x', pady=(0, 8))
@@ -1531,18 +1777,9 @@ class App:
                 return
             row = displayed_rows[selected[0]]
             # An export prompt pumps Tk events; a scan can replace/reorder the list.
-            if not self.can_discard():
-                return
             self.catalogue.learn(row['profile'])
             self.catalogue.save_library()
-            self.profile = Profile.from_text(row['profile'].to_text())
-            self.draft_session, self.last_draft = str(uuid.uuid4()), None
-            self.path = None
-            self.saved_text = self.profile.to_text()
-            self.history, self.future, self.history_labels, self.future_labels = [], [], [], []
-            self.selected = None
-            self.clear_browse_filters()
-            self.sync_profile()
+            self.adopt_profile(Profile.from_text(row['profile'].to_text()))
             self.update_input_choices()
             self.select_profile_controller()
             self.feedback('PROFILE COPY OPENED', f'{row["name"]} · {row["device"]}. Changes stay in this app until you export and import the XML.', 'success')
@@ -1568,10 +1805,10 @@ class App:
         ttk.Label(frame, text='From plugged in to ready to import', style='Heading.TLabel').pack(anchor='w')
         steps = [('1 · Connect and test', 'Select your controller and click Test controller. Every reported button and axis should react.'),
                  ('2 · Give inputs useful names', 'Click a numbered button or axis scale, enter a name, then Set name. Names stay with this controller.'),
-                 ('3 · Choose a profile', 'Click New and choose General, Airplane or Helicopter. Saved profiles opens a copy of an existing preset; Open XML reads an exported file.'),
+                 ('3 · Start a controller setup', 'Click New setup, or use MSFS presets / Open XML to bring in existing profiles. Switch General / Airplane / Helicopter without losing your edits. The layers work together.'),
                  ('4 · Find and record', 'Use Show, context and text filters. Get Input records one binding. Ctrl/Shift selects a group for Record selected.'),
-                 ('5 · Review', 'Use Follow controller to press an input and jump to its assignments. Review Behavior, Axis tuning and Conflicts.'),
-                 ('6 · Export and import', 'Export XML. In MSFS Settings → Controls, select the same controller and matching profile type, then its cogwheel → Import.')]
+                 ('5 · Save and review', 'Save setup stores all profiles and input names in one file. Follow controller searches across layers. Review Behavior, Axis tuning and Conflicts.'),
+                 ('6 · Export and import', 'Export setup creates one XML per profile and an import guide. In MSFS import each file under the matching type for the same controller, then select one General and one aircraft preset together.')]
         for title, body in steps:
             ttk.Label(frame, text=title, style='Heading.TLabel').pack(anchor='w', pady=(12, 3))
             ttk.Label(frame, text=body, wraplength=530).pack(anchor='w')
@@ -1708,12 +1945,18 @@ class App:
             if errors:
                 messagebox.showerror('Profile metadata', '\n'.join(errors[:6]), parent=window)
                 return
-            self.checkpoint('Edit profile / device metadata')
-            self.profile = candidate
+            if self.setup and len(self.setup.layers) > 1 and controller_key(candidate) != controller_key(self.profile):
+                messagebox.showerror('Profile metadata', 'Device identity must match every layer in this setup. Select the target controller and use Use for setup to copy all profiles together.', parent=window)
+                return
+            if controller_key(candidate) != controller_key(self.profile):
+                self.adopt_profile(candidate, fresh_setup=True)
+            else:
+                self.checkpoint('Edit profile / device metadata')
+                self.profile = candidate
             self.catalogue.learn(candidate)
             self.sync_profile()
             self.update_input_choices()
-            self.feedback('METADATA SAVED', 'Profile metadata updated. Export XML saves these changes.', 'success')
+            self.feedback('METADATA SAVED', 'Profile metadata updated. Save setup keeps these changes; Export setup prepares them for MSFS.', 'success')
             window.destroy()
         ttk.Button(frame, text='Apply metadata', command=apply, style='Accent.TButton').pack(fill='x', pady=(15, 0))
 
@@ -1748,7 +1991,7 @@ class App:
             self.error('Connect a controller and click Refresh before using Get Input.')
             return
         if not self.controller_matches():
-            self.error('The live controller differs from this profile. Choose Use for this profile before capturing inputs.')
+            self.error('The live controller differs from this setup. Choose Use for setup before capturing inputs.')
             return
         try:
             self.last_capture_slot = slot
@@ -1789,8 +2032,8 @@ class App:
             return
         targets = [self.row_ids[row] for row in selection]
         category = self.profile.category
-        if any(category not in self.catalogue.actions[target]['categories'] and target not in self.profile.actions() for target in targets):
-            self.error('Some selected actions belong to another profile type. Select compatible actions before recording.')
+        if any(not set(self.catalogue.actions[target]['categories']).intersection(CATEGORIES.values()) and target not in self.profile.actions() for target in targets):
+            self.error('Some selected actions need an imported aircraft-specific profile before recording.')
             return
         self.cancel_capture()
         self.recording = {'targets': targets, 'index': 0, 'slot': self.record_slot.get(),
@@ -1840,9 +2083,35 @@ class App:
             self.input_filter_names.append(group)
         self.refresh_list()
         rows = self.tree.get_children()
+        if not rows and self.setup:
+            groups = self.input_filter_names
+            following = self.follow_input.get()
+            for layer in self.setup.layers:
+                if layer.id == self.setup.active_id:
+                    continue
+                if self.layer_has_inputs(layer.profile, groups):
+                    self.stash_layer()
+                    self.activate_layer(layer, preserve_browse=True)
+                    self.input_filter_names = groups
+                    self.follow_input.set(following)
+                    self.follow_baseline = dict(self.current_values)
+                    self.refresh_list()
+                    rows = self.tree.get_children()
+                    break
         if rows:
             row = rows[0]
             self.selected = self.row_ids[row]
+            if self.profile.format == 'native' and self.profile.category not in self.catalogue.actions[self.selected]['categories'] and self.profile.action(*self.selected) is None:
+                chosen = self.selected_profile_type()
+                if chosen:
+                    groups, following = self.input_filter_names, self.follow_input.get()
+                    self.use_profile_type(chosen, preserve_browse=True)
+                    self.input_filter_names = groups
+                    self.follow_input.set(following)
+                    self.follow_baseline = dict(self.current_values)
+                    self.refresh_list()
+                    rows = self.tree.get_children()
+                    row = next(item for item in rows if self.row_ids[item] == self.selected)
             self.programmatic_selection = self.selected
             self.tree.selection_set(row)
             self.tree.focus(row)
@@ -1851,7 +2120,7 @@ class App:
         else:
             self.selected = None
             self.action_title.configure(text='No matching binding')
-            self.action_id.configure(text='This input is not assigned in the current profile. Clear input filter to choose a control.')
+            self.action_id.configure(text='This input is not assigned in any profile in this setup. Clear input filter to choose a control.')
             for slot in self.slot_vars:
                 self.slot_keys[slot] = []
                 self.slot_vars[slot].set('Unbound')
@@ -1859,9 +2128,21 @@ class App:
             self.update_binding_buttons()
         names = ' + '.join(self.input_display(name) for name in names)
         count = len(rows)
-        self.status.set(f'{count} binding match(es) for {names}.' + (' Selected the first match.' if count else ' This input is not assigned in this profile.'))
+        self.status.set(f'{count} binding match(es) for {names}.' + (f' Editing {self.profile.category.title()}.' if count else ' This input is not assigned in this setup.'))
         self.feedback('INPUT FOUND' if count else 'UNASSIGNED INPUT',
                       self.status.get() + ' Clear input filter returns to all controls.', 'success' if count else 'search', detected=names)
+
+    def layer_has_inputs(self, profile, groups):
+        family = device_family(profile.device.attrib)
+        modifiers = {162: 16, 163: 16, 160: 32, 161: 32, 164: 64, 165: 64}
+        for action in profile.actions().values():
+            for slot in ('Primary', 'Secondary'):
+                names = {input_identity(key.get('Information', ''), family) for key in action.findall(f'{slot}/KEY')}
+                if names and all(group.intersection(names) or (family == 'keyboard' and any(
+                    pair and modifiers.get(pair[1], 0) & int(action.get('Flag', '0')) for pair in
+                    (self.catalogue.resolve(name, family) for name in group))) for group in groups):
+                    return True
+        return False
 
     def clear_input_filter(self):
         self.input_filter = None
@@ -1880,10 +2161,16 @@ class App:
             count = len(session['targets'])
             self.recording = None
             self.capture = None
-            self.status.set(f'Recording finished: {session["recorded"]} saved, {session["skipped"]} skipped out of {count}. Review the bindings, then Export XML.')
+            self.status.set(f'Recording finished: {session["recorded"]} saved, {session["skipped"]} skipped out of {count}. Review the bindings, then Save setup or Export setup.')
             self.feedback('FINISHED', self.status.get(), 'success')
             return
         self.selected = session['targets'][session['index']]
+        if self.profile.category not in self.catalogue.actions[self.selected]['categories'] and self.profile.action(*self.selected) is None:
+            target = self.selected_profile_type()
+            self.recording = None
+            self.use_profile_type(target, preserve_browse=True)
+            self.recording = session
+            self.selected = session['targets'][session['index']]
         self.programmatic_selection = self.selected
         session['waiting'] = False
         self.show_action()
@@ -2037,7 +2324,7 @@ class App:
                                 self.jump_to_names(capture['names'])
                             else:
                                 self.bind(capture['slot'], pairs, modifiers=capture.get('modifiers', 0))
-                                self.feedback('SAVED', f'{capture["slot"]} binding saved for {self.action_name(self.catalogue.actions[self.selected])}. Export XML to save the profile.',
+                                self.feedback('SAVED', f'{capture["slot"]} binding assigned to {self.action_name(self.catalogue.actions[self.selected])}. Save setup keeps your work; Export setup prepares it for MSFS.',
                                               'success', detected=' + '.join(self.input_display(pair[0]) for pair in pairs))
                             if self.recording:
                                 self.recording['index'] += 1
@@ -2153,9 +2440,9 @@ class App:
             return False
 
     def import_guide(self):
-        messagebox.showinfo('Add the profile to MSFS 2024',
-            '1. Export XML to a folder you can find.\n2. Start MSFS 2024 when you are ready to use it.\n3. Settings → Controls → select the same controller.\n4. Click the cogwheel for the matching profile type.\n5. Import → choose your XML → select the imported preset.\n6. Set the desired aircraft/default assignment and test in flight.\n\n'
-            'Import both files for the same controller: camera/menu bindings under General controls, flight bindings under Airplane or Helicopter controls. Select both presets; MSFS uses them together. The app’s Editing selector only chooses which XML file you are editing. You can edit every profile with MSFS closed.\n\n'
+        messagebox.showinfo('Add the controller setup to MSFS 2024',
+            '1. Export setup to a folder you can find.\n2. Start MSFS 2024 when you are ready to use it.\n3. Settings → Controls → select the same controller.\n4. Follow IMPORT-SETUP.txt: use the cogwheel for each matching profile type.\n5. Import each XML and select one preset per type.\n6. Set the desired aircraft/default assignment and test in flight.\n\n'
+            'General camera/menu bindings work together with Airplane or Helicopter flight bindings. Switch between them in the app’s Editing selector; all profiles remain in one setup. Save setup stores them together in a .msfssetup file for this app; MSFS imports the separate XML files.\n\n'
             'SDK DefaultInput files opened here retain their SDK format; they are not native Controls-menu exports.', parent=self.root)
 
     def help(self):
@@ -2163,7 +2450,7 @@ class App:
         folders = '\n'.join(item['community'] for item in locations) or 'No simulator folder found.'
         messagebox.showinfo('MSFS Input Studio',
             f'Version {__version__} · portable, offline Windows app\n\n'
-            'Choose your controller → choose a profile type → find an action → Get Input → Export XML.\n'
+            'Choose your controller → New setup → switch General / Airplane / Helicopter → record → Save setup → Export setup.\n'
             'Use Add to chord for button combinations. Digital repeats while held. Once on press sends one event. Delayed / hold uses Delay in seconds.\n\n'
             f'{len(self.catalogue.actions):,} action/context entries from real exports, with English names where references supply them. Import reference profiles or an ActionDB to extend the catalogue.\n\n'
             'Windows inputs without a verified MSFS ID require a real reference export. XInput-only, VR and proprietary controls are not yet validated. CompositeID defaults to 0 for newly detected controllers; use a real export for composite-device metadata.\n\n'

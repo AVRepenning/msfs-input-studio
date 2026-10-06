@@ -37,6 +37,7 @@ def main():
         assert any(app.catalogue.actions[key].get('group') == 'Camera' for key in camera_rows)
         assert any(not app.catalogue.actions[key].get('group') for key in camera_rows)
         app.action_group.set('Camera / views')
+        app.view_category.set('Current profile')
         app.refresh_list()
         root.update()
         assert not app.row_ids
@@ -62,17 +63,16 @@ def main():
         checks.append('Showing hidden controls preserves the search and selected group')
         app.selected = next(key for key in subset if key[1] == 'KEY_COCKPIT_RESET')
         app.show_action()
-        assert app.profile_hint_button.cget('text') == 'New General profile'
+        assert app.profile_hint_button.cget('text') == 'Edit General controls'
+        previous_setup = app.setup
+        previous_xml = app.profile.to_text()
         app.profile_hint_button.invoke()
         root.update()
-        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
-        assert app.profile.to_text() == expected_profile
-        assert any(isinstance(widget, ttk.Combobox) and widget.get() == 'General controls' for widget in widgets(dialog))
-        create = next(widget for widget in widgets(dialog) if isinstance(widget, ttk.Button) and widget.cget('text') == 'Create profile')
-        with patch.object(app, 'can_discard', return_value=True):
-            create.invoke()
+        assert app.setup is previous_setup and previous_setup.category('AIRPLANE').profile.to_text() == previous_xml
+        assert not any(isinstance(child, tk.Toplevel) for child in root.winfo_children())
         assert app.profile.category == 'GENERAL' and flaps not in app.profile.actions()
-        checks.append('Camera selection offers a separate General profile without reclassifying existing flaps bindings')
+        checks.append('Camera editing switches to General in the same setup while keeping airplane flaps bindings')
+        app.search_var.set('')
         app.action_group.set('Camera / views')
         app.refresh_list()
         assert set(app.row_ids.values()) == camera_rows
@@ -125,7 +125,8 @@ def main():
         print(json.dumps(result, indent=2))
     finally:
         app.saved_text = app.profile.to_text() if app.profile else None
-        app.close()
+        with patch.object(app, 'can_discard', return_value=True):
+            app.close()
 
 
 if __name__ == '__main__':
