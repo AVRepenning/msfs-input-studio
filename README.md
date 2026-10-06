@@ -5,9 +5,9 @@ Create and edit profiles with the simulator closed, then import the exported XML
 through MSFS Controls. No Python, SDK, account or network connection is needed
 to run the executable.
 
-[Download v0.2.2](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.2).
+[Download v0.2.3](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.3).
 This repository and its downloads are private. The updated local executable is
-`dist/v0.2.2/MSFSInputStudio.exe`; an earlier open executable can remain running.
+`dist/v0.2.3/MSFSInputStudio.exe`; an earlier open executable can remain running.
 
 **Status: test build, with simulator and XRAY validation still outstanding.**
 Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
@@ -20,7 +20,11 @@ Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
    useful name, then **Set name**.
 2. Click **New** and choose General, Airplane or Helicopter. **Saved** opens a
    copy of an existing local Store preset; **Open XML** opens a simulator export.
-   Each profile type is a separate simulator preset.
+   Each profile type is a separate simulator preset. MSFS uses General and
+   aircraft presets together on the same controller: camera/menu bindings in
+   General work alongside flight bindings in Airplane or Helicopter. The
+   **Editing** selector chooses the XML file being edited, not which controller
+   functions can work during flight.
    Saved profiles load in the background with progress and retry feedback.
    If a control belongs to another type, the editor explains why it is disabled
    and offers a matching profile. An empty profile can change type while keeping
@@ -137,7 +141,7 @@ Controls-menu imports.
 ## Build and verify
 
 Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` installs pinned tools,
-runs tests, builds a windowed one-file executable into `dist/v0.2.2` and creates
+runs tests, builds a windowed one-file executable into `dist/v0.2.3` and creates
 a source archive there. Intermediate files go to LocalAppData to avoid OneDrive
 locks. The source archive includes the public fixtures; a fresh Git checkout
 needs these retrieved separately:
@@ -184,8 +188,8 @@ and the connected controller; it also reads local Store profiles when present.
 Pillow is not needed to build or run the app.
 
 ```powershell
-dist/v0.2.2/MSFSInputStudio.exe --smoke-test app-smoke.json
-dist/v0.2.2/MSFSInputStudio.exe --diagnose controller-diagnostics.json
+dist/v0.2.3/MSFSInputStudio.exe --smoke-test app-smoke.json
+dist/v0.2.3/MSFSInputStudio.exe --diagnose controller-diagnostics.json
 ```
 
 Next acceptance: connect XRAY, check its live inputs, export one verified axis

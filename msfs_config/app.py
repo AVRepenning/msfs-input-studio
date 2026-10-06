@@ -96,7 +96,7 @@ class App:
         self.split_pov = tk.BooleanVar(value=True)
         self.record_escape = tk.BooleanVar()
         self.include_modifiers = tk.BooleanVar(value=True)
-        self.capture_title = tk.StringVar(value='NOT RECORDING')
+        self.capture_title = tk.StringVar(value='READY')
         self.capture_detail = tk.StringVar(value='Select an action and click Get Input, or select several actions and Record selected.')
         self.detected_input = tk.StringVar(value='Detected input: —')
         self.slot_vars = {slot: tk.StringVar() for slot in ('Primary', 'Secondary')}
@@ -179,9 +179,9 @@ class App:
         self.device_summary = ttk.Label(device_row, text='Reading Windows controllers…', style='Muted.TLabel')
         self.device_summary.pack(side='left', padx=12)
 
-        toolbar = ttk.Frame(shell, padding=(0, 3, 0, 16))
+        toolbar = ttk.Frame(shell, padding=(0, 3, 0, 7))
         toolbar.pack(fill='x')
-        ttk.Label(toolbar, text='Profile').pack(side='left', padx=(0, 8))
+        ttk.Label(toolbar, text='Editing').pack(side='left', padx=(0, 8))
         self.name_entry = ttk.Entry(toolbar, textvariable=self.name_var, width=25)
         self.name_entry.pack(side='left')
         self.name_entry.bind('<FocusOut>', lambda _: setattr(self, 'renaming', False))
@@ -398,7 +398,7 @@ class App:
 
     def error(self, exc):
         self.cancel_capture()
-        self.feedback('ERROR · NOT RECORDING', str(exc), 'error')
+        self.feedback('ERROR', str(exc), 'error')
         messagebox.showerror('MSFS Input Studio', str(exc), parent=self.root)
 
     def callback_error(self, kind, value, traceback_object):
@@ -606,7 +606,7 @@ class App:
             self.sync_profile()
             self.refresh_devices()
             self.select_profile_controller()
-            self.feedback('WORKING COPY OPENED · NOT RECORDING', 'Continue editing, then Export XML and import it through MSFS Controls.', 'success')
+            self.feedback('WORKING COPY OPENED', 'Continue editing, then Export XML and import it through MSFS Controls.', 'success')
             window.destroy()
         listing.bind('<Double-1>', open_copy)
         ttk.Button(frame, text='Open selected working copy', command=open_copy, style='Accent.TButton').pack(fill='x', pady=(12, 0))
@@ -773,7 +773,7 @@ class App:
         frame = ttk.Frame(window, padding=22)
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='Choose what you want to configure', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(frame, text='General, airplane and helicopter controls are separate simulator profiles. Your current profile is kept until you create the new one.', wraplength=450).pack(anchor='w', pady=10)
+        ttk.Label(frame, text='MSFS uses General and aircraft profiles together on the same controller. Camera/menu controls go in General; flight controls go in Airplane or Helicopter. Choose which file to create. Your current edits are kept until you create it.', wraplength=450).pack(anchor='w', pady=10)
         name = tk.StringVar(value='My flight controls')
         category = tk.StringVar(value=next((label for label, value in CATEGORIES.items() if value == preferred_category),
                                           self.type_var.get() if self.type_var.get() in CATEGORIES else 'General controls'))
@@ -890,7 +890,7 @@ class App:
             self.profile.change_empty_category(chosen)
             self.sync_profile()
             label = next(label for label, value in CATEGORIES.items() if value == chosen)
-            self.feedback('PROFILE TYPE UPDATED · NOT RECORDING',
+            self.feedback('PROFILE TYPE UPDATED',
                           f'{label}. Your profile name, controller and axis settings are kept. Select a control and click Get Input.', 'success')
         else:
             self.new_profile_dialog(chosen)
@@ -1068,7 +1068,7 @@ class App:
                 types = ' / '.join(label.replace(' controls', '') for label, value in CATEGORIES.items() if value in hidden_categories)
                 self.empty_results_title.configure(text='Controls hidden by profile type')
                 self.empty_results_detail.configure(text=f'{hidden_count:,} matching controls belong to {types or "other"} profiles. '
-                                                   'Show them below, then select a control to choose a compatible profile. Your current bindings will be kept.')
+                                                   'MSFS uses General and aircraft profiles together on your controller. Show the controls below, then choose the file to edit. Your current bindings will be kept.')
                 self.show_other_profiles_button.pack(anchor='w', pady=(0, 8), before=self.clear_filters_button)
             else:
                 self.empty_results_title.configure(text='No controls match these filters')
@@ -1171,7 +1171,8 @@ class App:
                 current = self.type_var.get() if self.profile else 'No profile'
                 available = ' or '.join(label.replace(' controls', '') for label, value in CATEGORIES.items()
                                         if value in self.catalogue.actions[self.selected]['categories'])
-                self.profile_hint_text.configure(text=f'{current} cannot bind this control. This control uses {available} profiles.')
+                self.profile_hint_text.configure(text=f'This control is stored in {available} profiles, rather than the {current} file you are editing. '
+                                                     'MSFS uses General and aircraft profiles together on this controller, so camera and flight controls both work.')
                 blank = self.profile and self.profile.can_change_category()
                 self.profile_hint_button.configure(text=('Use ' if blank else 'New ') + label.replace(' controls', '') + ' profile')
                 self.profile_hint_button.pack(anchor='w', pady=(6, 0))
@@ -1249,7 +1250,7 @@ class App:
                 self.profile.set_binding(*target, slot, [])
         self.refresh_list()
         self.show_action()
-        self.feedback('BINDINGS CLEARED · NOT RECORDING', f'Cleared {slot.lower()} bindings on {len(targets)} selected controls. Undo restores them.', 'success')
+        self.feedback('BINDINGS CLEARED', f'Cleared {slot.lower()} bindings on {len(targets)} selected controls. Undo restores them.', 'success')
 
     def selected_actions_menu(self, event=None):
         if event:
@@ -1299,7 +1300,7 @@ class App:
                 self.profile = candidate
                 self.refresh_list()
                 self.show_action()
-                self.feedback('BEHAVIOR SAVED · NOT RECORDING', f'Updated {len(targets)} controls. Undo reverses the batch.', 'success')
+                self.feedback('BEHAVIOR SAVED', f'Updated {len(targets)} controls. Undo reverses the batch.', 'success')
                 window.destroy()
             except ValueError as exc:
                 messagebox.showerror('Batch behavior', str(exc), parent=window)
@@ -1439,7 +1440,7 @@ class App:
             self.profile_scan_progress.set(f'{len(rows)} profiles found. Open a copy to edit it offline.' if rows else
                                            'No local Store profile XML was found. Use Open XML with a profile exported by MSFS.')
             if not quiet and not (self.capture or self.recording or self.follow_input.get()):
-                self.feedback('SAVED PROFILES FOUND · NOT RECORDING', f'Found {len(rows)} local MSFS profiles and learned {len(self.catalogue.key_pairs) - before} additional input references.', 'success')
+                self.feedback('SAVED PROFILES FOUND', f'Found {len(rows)} local MSFS profiles and learned {len(self.catalogue.key_pairs) - before} additional input references.', 'success')
         except Exception as exc:
             self.profile_scan_progress.set(f'Profiles loaded; could not finish learning their references: {exc}. You can still open a copy.')
         finally:
@@ -1544,7 +1545,7 @@ class App:
             self.sync_profile()
             self.update_input_choices()
             self.select_profile_controller()
-            self.feedback('PROFILE COPY OPENED · NOT RECORDING', f'{row["name"]} · {row["device"]}. Changes stay in this app until you export and import the XML.', 'success')
+            self.feedback('PROFILE COPY OPENED', f'{row["name"]} · {row["device"]}. Changes stay in this app until you export and import the XML.', 'success')
             window.destroy()
         search.trace_add('write', refresh)
         listing.bind('<Double-1>', open_copy)
@@ -1625,7 +1626,7 @@ class App:
             self.context_combo.configure(values=['All contexts'] + sorted({a[0] for a in self.catalogue.actions}))
             self.update_input_choices()
             self.refresh_list()
-            self.feedback('REFERENCE IMPORT FINISHED · NOT RECORDING', f'Learned {count:,} action entries from {len(paths) - len(failures)} files.' + (' Skipped: ' + '; '.join(failures[:3]) if failures else ''), 'error' if failures else 'success')
+            self.feedback('REFERENCE IMPORT FINISHED', f'Learned {count:,} action entries from {len(paths) - len(failures)} files.' + (' Skipped: ' + '; '.join(failures[:3]) if failures else ''), 'error' if failures else 'success')
 
     def import_action_document(self, document):
         category = self.profile.category if self.profile else CATEGORIES[self.type_var.get()]
@@ -1633,7 +1634,7 @@ class App:
         self.catalogue.save_library()
         self.context_combo.configure(values=['All contexts'] + sorted({a[0] for a in self.catalogue.actions}))
         self.refresh_list()
-        self.feedback('CONTROLS ADDED · NOT RECORDING', f'Imported {count} controls into the library for {category}. Search their English names, categories or event IDs.', 'success')
+        self.feedback('CONTROLS ADDED', f'Imported {count} controls into the library for {category}. Search their English names, categories or event IDs.', 'success')
 
     def sdk_editor(self, kind):
         from .sdk import SDKDocument
@@ -1712,7 +1713,7 @@ class App:
             self.catalogue.learn(candidate)
             self.sync_profile()
             self.update_input_choices()
-            self.feedback('METADATA SAVED · NOT RECORDING', 'Profile metadata updated. Export XML saves these changes.', 'success')
+            self.feedback('METADATA SAVED', 'Profile metadata updated. Export XML saves these changes.', 'success')
             window.destroy()
         ttk.Button(frame, text='Apply metadata', command=apply, style='Accent.TButton').pack(fill='x', pady=(15, 0))
 
@@ -1734,7 +1735,7 @@ class App:
         if path:
             try:
                 result.save(path)
-                self.feedback('SDK SOURCE EXPORTED · NOT RECORDING', 'Saved DefaultInput XML. Add it to an SDK input project and build/test that package in MSFS.', 'success')
+                self.feedback('SDK SOURCE EXPORTED', 'Saved DefaultInput XML. Add it to an SDK input project and build/test that package in MSFS.', 'success')
             except (OSError, ValueError) as exc:
                 self.error(exc)
 
@@ -1776,7 +1777,7 @@ class App:
         self.capture_result = ''
         if active:
             self.status.set('Recording / input search stopped. Existing bindings are kept.')
-        self.feedback('NOT RECORDING', self.status.get() if active else 'Ready. Get Input records one binding; Record selected guides several actions.', detected='')
+        self.feedback('STOPPED' if active else 'READY', self.status.get() if active else 'Ready. Get Input records one binding; Record selected guides several actions.', detected='')
 
     def record_selected(self):
         selection = self.tree.selection()
@@ -1822,7 +1823,7 @@ class App:
             return
         self.follow_input.set(True)
         self.follow_baseline = dict(self.current_values)
-        self.feedback('FOLLOW CONTROLLER · NOT RECORDING', 'Press an input to jump to its bindings. Repeat with another input to search again. Escape stops following.', 'search', detected='')
+        self.feedback('FOLLOW CONTROLLER', 'Press an input to jump to its bindings. Repeat with another input to search again. Escape stops following.', 'search', detected='')
 
     def jump_to_inputs(self, pairs):
         self.jump_to_names([pair[0] for pair in pairs])
@@ -1859,7 +1860,7 @@ class App:
         names = ' + '.join(self.input_display(name) for name in names)
         count = len(rows)
         self.status.set(f'{count} binding match(es) for {names}.' + (' Selected the first match.' if count else ' This input is not assigned in this profile.'))
-        self.feedback('INPUT FOUND · NOT RECORDING' if count else 'UNASSIGNED INPUT · NOT RECORDING',
+        self.feedback('INPUT FOUND' if count else 'UNASSIGNED INPUT',
                       self.status.get() + ' Clear input filter returns to all controls.', 'success' if count else 'search', detected=names)
 
     def clear_input_filter(self):
@@ -1867,7 +1868,7 @@ class App:
         self.input_filter_names = None
         self.refresh_list()
         self.status.set('Input filter cleared.')
-        self.feedback('FOLLOW CONTROLLER · NOT RECORDING' if self.follow_input.get() else 'NOT RECORDING',
+        self.feedback('FOLLOW CONTROLLER' if self.follow_input.get() else 'READY',
                       'Input filter cleared.' + (' Press another input to find its bindings.' if self.follow_input.get() else ' Select a control to continue.'),
                       'search' if self.follow_input.get() else 'idle', detected='')
 
@@ -1880,7 +1881,7 @@ class App:
             self.recording = None
             self.capture = None
             self.status.set(f'Recording finished: {session["recorded"]} saved, {session["skipped"]} skipped out of {count}. Review the bindings, then Export XML.')
-            self.feedback('FINISHED · NOT RECORDING', self.status.get(), 'success')
+            self.feedback('FINISHED', self.status.get(), 'success')
             return
         self.selected = session['targets'][session['index']]
         self.programmatic_selection = self.selected
@@ -1947,7 +1948,7 @@ class App:
             action.attrib.update(Flag=str(flag), ValueEvent=str(value), Delay=str(delay))
             self.show_action()
             self.status.set('Behavior saved. Digital repeats while held; Once on press sends one event. On release triggers on release.')
-            self.feedback('BEHAVIOR SAVED · NOT RECORDING', self.status.get(), 'success')
+            self.feedback('BEHAVIOR SAVED', self.status.get(), 'success')
         except ValueError as exc:
             self.error(exc)
 
@@ -1992,7 +1993,7 @@ class App:
                 action.set('Flag', str(int(action.get('Flag', '4')) | 4096))
             self.show_action()
             self.status.set(f'{self.axis_var.get()} settings saved to {self.axis_scope.get().lower()}.')
-            self.feedback('AXIS SETTINGS SAVED · NOT RECORDING', self.status.get(), 'success')
+            self.feedback('AXIS SETTINGS SAVED', self.status.get(), 'success')
         except ValueError as exc:
             self.error(exc)
 
@@ -2036,7 +2037,7 @@ class App:
                                 self.jump_to_names(capture['names'])
                             else:
                                 self.bind(capture['slot'], pairs, modifiers=capture.get('modifiers', 0))
-                                self.feedback('SAVED · NOT RECORDING', f'{capture["slot"]} binding saved for {self.action_name(self.catalogue.actions[self.selected])}. Export XML to save the profile.',
+                                self.feedback('SAVED', f'{capture["slot"]} binding saved for {self.action_name(self.catalogue.actions[self.selected])}. Export XML to save the profile.',
                                               'success', detected=' + '.join(self.input_display(pair[0]) for pair in pairs))
                             if self.recording:
                                 self.recording['index'] += 1
@@ -2052,13 +2053,13 @@ class App:
                             missing = ', '.join(name for name, pair in zip(capture['names'], pairs) if pair is None)
                             self.status.set(f'Detected {missing}; export blocked for this input until its ID is learned from a real XML.')
                             self.capture_result = 'retry'
-                            self.feedback('INPUT DETECTED · ID NEEDED · NOT RECORDING',
+                            self.feedback('INPUT DETECTED · ID NEEDED',
                                           f'{missing}. Open a simulator export containing this input to learn its ID, then Try again. The binding was not changed.', 'error')
                     elif time.monotonic() >= capture['deadline']:
                         self.capture = None
                         self.capture_result = 'retry'
                         self.status.set('No new input detected. Release held buttons first; move an axis farther, then Try again. No binding was changed.')
-                        self.feedback('TIMED OUT · NOT RECORDING', self.status.get(), 'error')
+                        self.feedback('TIMED OUT', self.status.get(), 'error')
                 elif self.recording and self.recording['waiting']:
                     session = self.recording
                     released = all(not current[offset] for offset in session.get('release_offsets', set()))
@@ -2093,10 +2094,10 @@ class App:
             except OSError as exc:
                 self.cancel_capture()
                 self.status.set(f'{exc} Reconnect the controller and click Refresh.')
-                self.feedback('CONTROLLER DISCONNECTED · NOT RECORDING', self.status.get(), 'error', detected='')
+                self.feedback('CONTROLLER DISCONNECTED', self.status.get(), 'error', detected='')
                 self.controller.close()
                 self.controller = None
-                self.feedback('DISCONNECTED · NOT RECORDING', self.status.get(), 'error')
+                self.feedback('DISCONNECTED', self.status.get(), 'error')
                 self.dashboard.update_inputs([], {})
                 self.update_binding_buttons()
         self.root.after(50, self.poll)
@@ -2142,8 +2143,10 @@ class App:
             if labels or sidecar.is_file():
                 sidecar.write_text(json.dumps({'controller_labels': {guid: labels}}, indent=2), encoding='utf-8')
             self.path, self.saved_text = Path(path), self.profile.to_text()
-            self.status.set(f'Exported {self.path.name}. In MSFS: Settings → Controls → this controller → matching profile cogwheel → Import.')
-            self.feedback('EXPORTED · NOT RECORDING', self.status.get(), 'success')
+            profile_type = next((label for label, value in CATEGORIES.items() if value == self.profile.category), self.profile.category)
+            self.status.set(f'Exported {self.path.name}. Import under {profile_type} for this controller in MSFS. '
+                            'Select your General and aircraft presets together to use camera and flight controls.')
+            self.feedback('EXPORTED', self.status.get(), 'success')
             return True
         except Exception as exc:
             self.error(exc)
@@ -2152,7 +2155,7 @@ class App:
     def import_guide(self):
         messagebox.showinfo('Add the profile to MSFS 2024',
             '1. Export XML to a folder you can find.\n2. Start MSFS 2024 when you are ready to use it.\n3. Settings → Controls → select the same controller.\n4. Click the cogwheel for the matching profile type.\n5. Import → choose your XML → select the imported preset.\n6. Set the desired aircraft/default assignment and test in flight.\n\n'
-            'General and airplane controls are separate profiles; export/import each type separately. You can edit every profile with MSFS closed.\n\n'
+            'Import both files for the same controller: camera/menu bindings under General controls, flight bindings under Airplane or Helicopter controls. Select both presets; MSFS uses them together. The app’s Editing selector only chooses which XML file you are editing. You can edit every profile with MSFS closed.\n\n'
             'SDK DefaultInput files opened here retain their SDK format; they are not native Controls-menu exports.', parent=self.root)
 
     def help(self):

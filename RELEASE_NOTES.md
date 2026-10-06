@@ -1,5 +1,10 @@
 Portable Windows controller-profile editor for use with MSFS 2024 closed.
 
+v0.2.3 fixes:
+
+- Removed the redundant "NOT RECORDING" suffix from Exported, Saved, profile-opening, search and error messages. Messages now show the result directly. Idle says Ready; cancelling capture says Stopped. Active recording still shows listening, countdown and detected-input feedback.
+- Clarified that MSFS applies General and aircraft profiles together on the same controller. The selector is labelled Editing; profile guidance, new-profile text, export feedback and the import guide explain how camera and flight bindings work together.
+
 v0.2.2 fixes:
 
 - Camera/view controls no longer leave an unexplained empty list when browsing an Airplane or Helicopter profile. The list explains that matching controls belong to General profiles and offers Show matching controls from all profiles, preserving the search and existing bindings.

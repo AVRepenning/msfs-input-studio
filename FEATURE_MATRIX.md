@@ -4,7 +4,7 @@ The target is MSFS Controls settings and the SDK input editors, plus easier
 offline setup. Source editing is distinguished from simulator acceptance.
 This is not a claim of complete parity.
 
-| Feature | v0.2.2 | Remaining work / acceptance |
+| Feature | v0.2.3 | Remaining work / acceptance |
 | --- | --- | --- |
 | Windows discovery/live inputs | DirectInput, keyboard/mouse, XInput reader | XRAY, physical XInput, VR/proprietary devices |
 | Native profile read/export | 48 public round trips | Generated-file import and in-flight test |

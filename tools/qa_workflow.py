@@ -80,7 +80,7 @@ def main():
             capture_window(root, Path('research/recording-feedback.png'))
         poll(pressed, 100.9)
         assert app.profile.keys(*gear, 'Primary')[0][1] == '0'
-        assert 'NOT RECORDING' in app.capture_title.get()
+        assert app.capture is None and app.capture_title.get() == 'SAVED'
         passed('Listening, countdown, detection and saved feedback')
 
         before = app.profile.to_text()
@@ -155,7 +155,7 @@ def main():
         start('Secondary', 450)
         app.root.event_generate('<Escape>')
         root.update()
-        assert app.capture is None and 'NOT RECORDING' in app.capture_title.get()
+        assert app.capture is None and app.capture_title.get() in ('STOPPED', 'READY')
         passed('Escape cancellation')
 
         app.search_var.set('nothing can match this text')
