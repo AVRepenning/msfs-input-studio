@@ -5,6 +5,9 @@ A small, English-language, offline Windows editor for Microsoft Flight Simulator
 reads buttons, axes and hats, and exports XML for the simulator's Controls-menu
 import. MSFS does not need to run while you create or edit profiles.
 
+[Download the Windows test build and source archive](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.1.0).
+The repository and downloads are private and require access to AVRepenning's GitHub account.
+
 **Status: first runnable build, awaiting simulator validation.** XML preservation,
 Windows enumeration/polling and app commands have been tested. Importing a newly
 generated profile and flying with it have **not** been tested in MSFS 2024 yet.
