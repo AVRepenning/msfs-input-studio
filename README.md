@@ -5,9 +5,9 @@ Create and edit profiles with the simulator closed, then import the exported XML
 through MSFS Controls. No Python, SDK, account or network connection is needed
 to run the executable.
 
-[Download v0.2.1](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.1).
+[Download v0.2.2](https://github.com/AVRepenning/msfs-input-studio/releases/tag/v0.2.2).
 This repository and its downloads are private. The updated local executable is
-`dist/v0.2.1/MSFSInputStudio.exe`; an earlier open executable can remain running.
+`dist/v0.2.2/MSFSInputStudio.exe`; an earlier open executable can remain running.
 
 **Status: test build, with simulator and XRAY validation still outstanding.**
 Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
@@ -29,6 +29,10 @@ Complete feature parity has not been established; see `FEATURE_MATRIX.md`.
 3. **Show** changes which controls you browse without changing the profile.
    Search names, event IDs, contexts and assigned input labels; filter by group,
    context, bound/unbound or possible conflicts. Column headings sort the list.
+   Camera/view controls use a General profile. If the current profile hides all
+   matching controls, the list explains why and offers **Show matching controls
+   from all profiles** while preserving your search. **Clear filters** handles
+   other empty searches. Camera source groups appear together as **Camera / views**.
 4. Select an action and click **Get Input** in Primary or Secondary. The panel
    shows recording state, remaining time, detected inputs and the result. Press
    chords together or move the intended axis. Diagonal stick movement captures
@@ -133,7 +137,7 @@ Controls-menu imports.
 ## Build and verify
 
 Use 64-bit Windows Python 3.12+ with Tkinter. `build.bat` installs pinned tools,
-runs tests, builds a windowed one-file executable into `dist/v0.2.1` and creates
+runs tests, builds a windowed one-file executable into `dist/v0.2.2` and creates
 a source archive there. Intermediate files go to LocalAppData to avoid OneDrive
 locks. The source archive includes the public fixtures; a fresh Git checkout
 needs these retrieved separately:
@@ -161,6 +165,9 @@ Validation:
   close/reopen/cancellation, cached counts, large-profile opening, profile-type
   guidance, preservation and Undo/Redo. A simulated flaps-axis recording is
   verified against the connected controller's real Windows inputs.
+- Eight camera workflow checks reproduce hidden controls, reveal all 470 known
+  camera/view entries, preserve filters and airplane bindings, and record a
+  simulated camera button binding in a separate General profile.
 - Windows enumerates the connected PowerA FlightDeck's seven axes and 27 buttons.
   Keyboard/mouse readers initialize. Physical manipulation and a connected
   native XInput device have not been tested.
@@ -173,11 +180,12 @@ Validation:
 `tools/qa_system_workflow.py` needs local keyboard/mouse reference profiles.
 `tools/qa_saved_workflow.py` reproduces Saved and flaps setup, using Pillow
 and the connected controller; it also reads local Store profiles when present.
+`tools/qa_camera_workflow.py` checks camera discovery, filter guidance and capture.
 Pillow is not needed to build or run the app.
 
 ```powershell
-dist/v0.2.1/MSFSInputStudio.exe --smoke-test app-smoke.json
-dist/v0.2.1/MSFSInputStudio.exe --diagnose controller-diagnostics.json
+dist/v0.2.2/MSFSInputStudio.exe --smoke-test app-smoke.json
+dist/v0.2.2/MSFSInputStudio.exe --diagnose controller-diagnostics.json
 ```
 
 Next acceptance: connect XRAY, check its live inputs, export one verified axis

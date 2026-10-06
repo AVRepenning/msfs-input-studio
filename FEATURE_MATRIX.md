@@ -4,12 +4,12 @@ The target is MSFS Controls settings and the SDK input editors, plus easier
 offline setup. Source editing is distinguished from simulator acceptance.
 This is not a claim of complete parity.
 
-| Feature | v0.2.1 | Remaining work / acceptance |
+| Feature | v0.2.2 | Remaining work / acceptance |
 | --- | --- | --- |
 | Windows discovery/live inputs | DirectInput, keyboard/mouse, XInput reader | XRAY, physical XInput, VR/proprietary devices |
 | Native profile read/export | 48 public round trips | Generated-file import and in-flight test |
 | General/Airplane/Helicopter | Explicit New, mismatch guidance, safe blank type switch with Undo | Simulator aircraft/default assignment |
-| Browsing | Independent type, group, context, sort, bound/unbound | Complete current action database |
+| Browsing | Independent filters, unified camera group, empty-list explanation/reveal/reset | Complete current action database |
 | English names | 1,652 joined entries, event-name fallbacks | Remaining controls and localization tokens |
 | Individual/guided capture | Countdown, detection, saved/retry/timeout, pause/skip | Physical sessions |
 | Test panel and input names | Button lights, XY, numeric axis scales, scroll/popup | XRAY enumeration and reconnect |

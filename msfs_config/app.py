@@ -264,6 +264,16 @@ class App:
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side='left', fill='both', expand=True)
         scroll.pack(side='right', fill='y')
+        self.empty_results = ttk.Frame(table, padding=20)
+        self.empty_results_title = ttk.Label(self.empty_results, text='No controls shown', style='Heading.TLabel')
+        self.empty_results_title.pack(anchor='w')
+        self.empty_results_detail = ttk.Label(self.empty_results, wraplength=580)
+        self.empty_results_detail.pack(anchor='w', pady=(8, 12))
+        self.empty_results.bind('<Configure>', lambda event: self.empty_results_detail.configure(wraplength=max(240, event.width - 40)))
+        self.show_other_profiles_button = ttk.Button(self.empty_results, text='Show matching controls from all profiles',
+                                                     command=self.show_matching_controls, style='Accent.TButton')
+        self.clear_filters_button = ttk.Button(self.empty_results, text='Clear filters', command=self.clear_browse_filters)
+        self.clear_filters_button.pack(anchor='w')
         self.tree.tag_configure('unavailable', foreground='#919aaa')
         self.tree.tag_configure('bound', foreground='#185ba8')
         self.tree.tag_configure('conflict', foreground='#9c3e09')
@@ -970,11 +980,10 @@ class App:
         self.conflict_map = binding_conflicts(self.profile) if self.profile else {}
         conflicts = set(self.conflict_map)
         rows = []
+        hidden_count, hidden_categories = 0, set()
         for identity, entry in self.catalogue.actions.items():
             available = category in entry['categories'] or identity in bound
             visible = browse_category in entry['categories'] or (identity in bound and view == 'Current profile')
-            if not visible and view != 'All controls' and not self.show_all.get():
-                continue
             if self.context_var.get() != 'All contexts' and entry['context'] != self.context_var.get():
                 continue
             group = self.action_group_name(entry)
@@ -1017,6 +1026,10 @@ class App:
                     return False
                 if not any(all(matches(group, names) for group in self.input_filter_names) for names in slot_names):
                     continue
+            if not visible and view != 'All controls' and not self.show_all.get():
+                hidden_count += 1
+                hidden_categories.update(entry['categories'])
+                continue
             rows.append((identity, self.action_name(entry), entry['context'], binding, available))
         index = {'name': 1, 'action': 1, 'context': 2, 'binding': 3}.get(self.sort_column, 1)
         rows.sort(key=lambda r: (r[index].casefold(), r[0]), reverse=self.sort_reverse)
@@ -1048,10 +1061,30 @@ class App:
             self.update_binding_buttons()
         self.count_label.configure(text=f'{len(rows):,} controls · {sum(bool(r[3]) for r in rows):,} bound · {len(conflicts)} possible conflicts · Ctrl/Shift selects several')
         self.group_combo.configure(values=['All groups'] + sorted({self.action_group_name(e) for e in self.catalogue.actions.values()}))
+        self.empty_results.place_forget()
+        self.show_other_profiles_button.pack_forget()
+        if not rows:
+            if hidden_count:
+                types = ' / '.join(label.replace(' controls', '') for label, value in CATEGORIES.items() if value in hidden_categories)
+                self.empty_results_title.configure(text='Controls hidden by profile type')
+                self.empty_results_detail.configure(text=f'{hidden_count:,} matching controls belong to {types or "other"} profiles. '
+                                                   'Show them below, then select a control to choose a compatible profile. Your current bindings will be kept.')
+                self.show_other_profiles_button.pack(anchor='w', pady=(0, 8), before=self.clear_filters_button)
+            else:
+                self.empty_results_title.configure(text='No controls match these filters')
+                self.empty_results_detail.configure(text='Try another search, group or context, or clear the filters. '
+                                                   'Bound only, Unbound, Conflicts and input searches can also hide controls.')
+            self.empty_results.place(relx=.5, rely=.45, anchor='center', relwidth=.92)
+
+    def show_matching_controls(self):
+        self.view_category.set('All controls')
+        self.refresh_list()
 
     @staticmethod
     def action_group_name(entry):
         if entry.get('group'):
+            if entry['group'].strip().casefold() in ('camera', 'cameras', 'camera / views'):
+                return 'Camera / views'
             return entry['group']
         name = entry['name']
         # App browsing groups; imported ActionDB categories take precedence.
