@@ -1,0 +1,6 @@
+# The app uses only Python's standard library (Tkinter + native DirectInput).
+# Required only to build the portable Windows executable:
+pyinstaller==6.16.0
+pyinstaller-hooks-contrib==2025.8
+packaging==25.0
+setuptools==80.9.0
